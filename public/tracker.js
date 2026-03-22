@@ -8,6 +8,9 @@
 
   var ENDPOINT = 'https://stats.zurich-sailing.ch/collect.php';
 
+  // Clubdesk-Editor nicht tracken
+  if (window.location.search.indexOf('edit=') !== -1) return;
+
   // Zufällige View-ID für Verweildauer-Tracking
   function genId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {

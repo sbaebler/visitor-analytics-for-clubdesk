@@ -216,13 +216,23 @@ $deviceData   = array_column($devices, 'cnt');
                             <tr><td colspan="3" class="empty">Noch keine Daten</td></tr>
                         <?php else: ?>
                             <?php foreach ($topPages as $row): ?>
+                                <?php
+                                    // Seitentitel bereinigen: "Titel – Zurich Sailing" → "Titel"
+                                    $title = $row['page_title'] ?? '';
+                                    $title = preg_replace('/\s*[-–|]\s*Zurich Sailing.*$/i', '', $title);
+                                    $title = trim($title);
+                                ?>
                                 <tr>
                                     <td>
-                                        <span class="url-path" title="<?= htmlspecialchars($row['url']) ?>">
-                                            <?= htmlspecialchars(shortUrl($row['url'])) ?>
-                                        </span>
-                                        <?php if (!empty($row['page_title'])): ?>
-                                            <span class="url-title"><?= htmlspecialchars($row['page_title']) ?></span>
+                                        <?php if ($title !== ''): ?>
+                                            <span class="url-path" title="<?= htmlspecialchars($row['url']) ?>">
+                                                <?= htmlspecialchars($title) ?>
+                                            </span>
+                                            <span class="url-title"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
+                                        <?php else: ?>
+                                            <span class="url-path" title="<?= htmlspecialchars($row['url']) ?>">
+                                                <?= htmlspecialchars(shortUrl($row['url'])) ?>
+                                            </span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="num"><?= number_format((int)$row['views'], 0, '.', "'") ?></td>
