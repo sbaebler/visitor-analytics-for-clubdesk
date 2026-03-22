@@ -15,7 +15,7 @@ jobs:
       - name: Deploy via FTPS (lftp)
         env:
           FTP_USER: ftp_stats@zurich-sailing.ch
-          FTP_PASSWORD: ${{ secrets.CYON_FTP_PASSWORD }}
+          FTP_PASSWORD: ${{ secrets.CYON_SFTP_PASSWORD }}
           FTP_HOST: ftp.zurich-sailing.ch
           REMOTE_PATH: /public_html/stats/
         run: |
