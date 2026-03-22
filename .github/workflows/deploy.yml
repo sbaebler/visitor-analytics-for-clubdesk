@@ -1,0 +1,30 @@
+name: Deploy to cyon.ch
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SFTP (lftp)
+        env:
+          SFTP_PASSWORD: ${{ secrets.CYON_SFTP_PASSWORD }}
+        run: |
+          sudo apt-get install -y lftp -q
+          lftp -c "
+            set sftp:auto-confirm yes
+            set net:timeout 15
+            set net:max-retries 3
+            open sftp://vabavoco:$SFTP_PASSWORD@s135.cyon.net
+            mirror --reverse --delete \
+              --exclude=^\.git/ \
+              --exclude=^\.github/ \
+              --exclude=config/config\.php \
+              . /home/vabavoco/public_html/stats/
+          "
