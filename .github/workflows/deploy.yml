@@ -16,11 +16,11 @@ jobs:
         env:
           FTP_USER: ftp_stats@zurich-sailing.ch
           FTP_PASSWORD: ${{ secrets.CYON_SFTP_PASSWORD }}
-          FTP_HOST: s135.cyon.net
+          FTP_HOST: ftp.zurich-sailing.ch
           REMOTE_PATH: /public_html/stats/
         run: |
           sudo apt-get install -y lftp -q
-          lftp -u "$FTP_USER,$FTP_PASSWORD" sftp://$FTP_HOST <<EOF
+          lftp -u "$FTP_USER,$FTP_PASSWORD" sftp://$FTP_HOST:22 <<EOF
             set sftp:auto-confirm yes
             set net:timeout 30
             set net:max-retries 3
