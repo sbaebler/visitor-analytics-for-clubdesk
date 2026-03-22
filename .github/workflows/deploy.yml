@@ -12,22 +12,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy via SFTP (lftp)
-        env:
-          FTP_USER: ftp_stats@zurich-sailing.ch
-          FTP_PASSWORD: ${{ secrets.CYON_SFTP_PASSWORD }}
-          FTP_HOST: ftp.zurich-sailing.ch
-          REMOTE_PATH: /public_html/stats/
-        run: |
-          sudo apt-get install -y lftp -q
-          lftp -u "$FTP_USER,$FTP_PASSWORD" sftp://$FTP_HOST:22 <<EOF
-            set sftp:auto-confirm yes
-            set net:timeout 30
-            set net:max-retries 3
-            mirror --reverse --delete \
-              --exclude=^\.git/ \
-              --exclude=^\.github/ \
-              --exclude=config/config\.php \
-              . $REMOTE_PATH
-            bye
-          EOF
+      # FTP-User ftp_stats@zurich-sailing.ch landet direkt in /home/vabavoco/public_html/stats
+      # → server-dir ist "/" (FTP-Root = Subdomain-Root)
+      - name: Deploy via FTP to cyon
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server:   ${{ secrets.CYON_SFTP_HOST }}
+          username: ${{ secrets.CYON_SFTP_USER }}
+          password: ${{ secrets.CYON_SFTP_PASSWORD }}
+          protocol: ftps
+          port:     21
+          local-dir:  ./
+          server-dir: /
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.DS_Store
+            **/config/config.php
