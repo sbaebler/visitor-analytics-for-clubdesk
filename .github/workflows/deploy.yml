@@ -14,20 +14,22 @@ jobs:
 
       - name: Deploy via FTPS (lftp)
         env:
+          FTP_USER: ftp_stats@zurich-sailing.ch
           FTP_PASSWORD: ${{ secrets.CYON_FTP_PASSWORD }}
+          FTP_HOST: ftp.zurich-sailing.ch
+          REMOTE_PATH: /public_html/stats/
         run: |
           sudo apt-get install -y lftp -q
-          lftp -c "
+          lftp -u "$FTP_USER,$FTP_PASSWORD" ftps://$FTP_HOST <<EOF
             set ftp:ssl-force true
             set ftp:ssl-protect-data true
             set ssl:verify-certificate false
             set net:timeout 15
             set net:max-retries 3
-            open ftps://ftp.zurich-sailing.ch
-            user ftp_stats@zurich-sailing.ch $FTP_PASSWORD
             mirror --reverse --delete \
               --exclude=^\.git/ \
               --exclude=^\.github/ \
               --exclude=config/config\.php \
-              . /public_html/stats/
-          "
+              . $REMOTE_PATH
+            bye
+          EOF
