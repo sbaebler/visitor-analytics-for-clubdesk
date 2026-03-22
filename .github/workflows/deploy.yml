@@ -12,19 +12,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy via SFTP (lftp)
+      - name: Deploy via FTPS (lftp)
         env:
-          SFTP_PASSWORD: ${{ secrets.CYON_SFTP_PASSWORD }}
+          FTP_PASSWORD: ${{ secrets.CYON_FTP_PASSWORD }}
         run: |
           sudo apt-get install -y lftp -q
           lftp -c "
-            set sftp:auto-confirm yes
+            set ftp:ssl-force true
+            set ftp:ssl-protect-data true
+            set ssl:verify-certificate false
             set net:timeout 15
             set net:max-retries 3
-            open sftp://vabavoco:$SFTP_PASSWORD@s135.cyon.net
+            open ftps://ftp.zurich-sailing.ch
+            user ftp_stats@zurich-sailing.ch $FTP_PASSWORD
             mirror --reverse --delete \
               --exclude=^\.git/ \
               --exclude=^\.github/ \
               --exclude=config/config\.php \
-              . /home/vabavoco/public_html/stats/
+              . /
           "
