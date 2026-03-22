@@ -12,19 +12,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy via FTPS (lftp)
+      - name: Deploy via SFTP (lftp)
         env:
           FTP_USER: ftp_stats@zurich-sailing.ch
           FTP_PASSWORD: ${{ secrets.CYON_SFTP_PASSWORD }}
-          FTP_HOST: ftp.zurich-sailing.ch
+          FTP_HOST: s135.cyon.net
           REMOTE_PATH: /public_html/stats/
         run: |
           sudo apt-get install -y lftp -q
-          lftp -u "$FTP_USER,$FTP_PASSWORD" ftps://$FTP_HOST <<EOF
-            set ftp:ssl-force true
-            set ftp:ssl-protect-data true
-            set ssl:verify-certificate false
-            set net:timeout 15
+          lftp -u "$FTP_USER,$FTP_PASSWORD" sftp://$FTP_HOST <<EOF
+            set sftp:auto-confirm yes
+            set net:timeout 30
             set net:max-retries 3
             mirror --reverse --delete \
               --exclude=^\.git/ \
