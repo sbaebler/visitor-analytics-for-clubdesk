@@ -29,5 +29,5 @@ jobs:
               --exclude=^\.git/ \
               --exclude=^\.github/ \
               --exclude=config/config\.php \
-              . /
+              . /public_html/stats/
           "
