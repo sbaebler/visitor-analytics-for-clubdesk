@@ -45,14 +45,17 @@ class Auth
     public static function login(string $username, string $password): bool
     {
         $config = require __DIR__ . '/../config/config.php';
-        if (
-            $username === $config['auth']['username'] &&
-            password_verify($password, $config['auth']['password_hash'])
-        ) {
-            self::start();
-            session_regenerate_id(true);
-            $_SESSION[self::SESSION_KEY] = ['ts' => time()];
-            return true;
+        $users  = $config['users'] ?? [];
+        foreach ($users as $user) {
+            if (
+                $username === $user['username'] &&
+                password_verify($password, $user['password_hash'])
+            ) {
+                self::start();
+                session_regenerate_id(true);
+                $_SESSION[self::SESSION_KEY] = ['ts' => time()];
+                return true;
+            }
         }
         return false;
     }

@@ -7,10 +7,12 @@ return [
         'pass'    => 'CHANGE_ME',
         'charset' => 'utf8mb4',
     ],
-    'auth' => [
-        'username'      => 'admin',
-        // Generieren mit: php -r "echo password_hash('DEIN_PASSWORT', PASSWORD_DEFAULT);"
-        'password_hash' => '',
+    'users' => [
+        [
+            'username'      => 'admin',
+            // Generieren mit: php -r "echo password_hash('DEIN_PASSWORT', PASSWORD_DEFAULT);"
+            'password_hash' => '',
+        ],
     ],
     // Salt für anonymes Fingerprinting (zufälliger langer String)
     'salt' => 'CHANGE_ME_RANDOM_STRING_MIN_32_CHARS',
