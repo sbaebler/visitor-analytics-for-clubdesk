@@ -50,6 +50,24 @@ function makeFingerprint(array $config): string
     return hash('sha256', $ip . '|' . $ua . '|' . $lang . '|' . $date . '|' . $config['salt']);
 }
 
+function getCountryCode(): ?string
+{
+    // Methode 1: Cloudflare-Header (falls Traffic über Cloudflare läuft)
+    $cf = strtoupper(trim($_SERVER['HTTP_CF_IPCOUNTRY'] ?? ''));
+    if ($cf !== '' && $cf !== 'XX' && preg_match('/^[A-Z]{2}$/', $cf)) {
+        return $cf;
+    }
+    // Methode 2: PHP GeoIP-Extension (falls auf dem Server installiert)
+    if (function_exists('geoip_country_code_by_name')) {
+        $ip   = $_SERVER['REMOTE_ADDR'] ?? '';
+        $code = @geoip_country_code_by_name($ip);
+        if ($code !== false && $code !== '') {
+            return strtoupper($code);
+        }
+    }
+    return null;
+}
+
 function sanitizeUrl(string $url): string
 {
     $url = filter_var($url, FILTER_SANITIZE_URL);
@@ -77,19 +95,22 @@ try {
         $width   = is_numeric($data['width'] ?? '') ? (int)$data['width'] : null;
         $lang    = sanitizeStr($data['lang'] ?? '', 32);
 
+        $country = getCountryCode();
+
         $stmt = $pdo->prepare(
-            'INSERT INTO pageviews (view_id, fingerprint, url, page_title, referrer, device_type, screen_width, lang)
-             VALUES (:view_id, :fp, :url, :title, :ref, :device, :width, :lang)'
+            'INSERT INTO pageviews (view_id, fingerprint, url, page_title, referrer, device_type, screen_width, lang, country)
+             VALUES (:view_id, :fp, :url, :title, :ref, :device, :width, :lang, :country)'
         );
         $stmt->execute([
-            ':view_id' => $viewId,
-            ':fp'      => $fingerprint,
-            ':url'     => $url,
-            ':title'   => $title,
-            ':ref'     => $ref,
-            ':device'  => $device,
-            ':width'   => $width,
-            ':lang'    => $lang,
+            ':view_id'  => $viewId,
+            ':fp'       => $fingerprint,
+            ':url'      => $url,
+            ':title'    => $title,
+            ':ref'      => $ref,
+            ':device'   => $device,
+            ':width'    => $width,
+            ':lang'     => $lang,
+            ':country'  => $country,
         ]);
 
     } elseif ($type === 'duration') {

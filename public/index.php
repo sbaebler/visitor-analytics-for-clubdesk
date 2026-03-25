@@ -99,6 +99,12 @@ $devices = q($pdo,
      WHERE created_at BETWEEN :s AND :e
      GROUP BY device_type ORDER BY cnt DESC', $p);
 
+// Top Länder
+$topCountries = q($pdo,
+    "SELECT country, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
+     FROM pageviews WHERE created_at BETWEEN :s AND :e AND country IS NOT NULL
+     GROUP BY country ORDER BY visitors DESC LIMIT 10", $p);
+
 // Externe Links
 $outboundLinks = q($pdo,
     "SELECT event_value, COUNT(*) as clicks FROM events
@@ -121,6 +127,19 @@ function shortUrl(string $url): string
     $result = $path ?: '/';
     if ($query) $result .= '?' . $query;
     return $result;
+}
+
+function countryFlag(string $code): string
+{
+    // ISO 3166-1 alpha-2 → Regional Indicator Symbol (Flaggen-Emoji)
+    $code   = strtoupper($code);
+    $offset = 0x1F1E6 - ord('A');
+    $flag   = '';
+    foreach (str_split($code) as $char) {
+        $cp    = ord($char) + $offset;
+        $flag .= mb_convert_encoding('&#' . $cp . ';', 'UTF-8', 'HTML-ENTITIES');
+    }
+    return $flag;
 }
 
 function shortDomain(string $url): string
@@ -333,6 +352,32 @@ $deviceData   = array_column($devices, 'cnt');
                 </table>
             </div>
         </div>
+
+        <?php if (!empty($topCountries)): ?>
+        <!-- Top Länder -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Herkunft der Besucher</h2>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Land</th><th>Besucher</th><th>Aufrufe</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($topCountries as $row): ?>
+                        <tr>
+                            <td>
+                                <span style="font-size:1.2em;margin-right:.4em"><?= countryFlag($row['country']) ?></span>
+                                <?= htmlspecialchars($row['country']) ?>
+                            </td>
+                            <td class="num"><?= number_format((int)$row['visitors'], 0, '.', "'") ?></td>
+                            <td class="num"><?= number_format((int)$row['views'], 0, '.', "'") ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
 
     </main>
 
