@@ -50,7 +50,9 @@ $startStr = $start->format('Y-m-d H:i:s');
 $endStr   = $end->format('Y-m-d H:i:s');
 
 // --- Queries ---
-$pdo = Database::get();
+$pdo    = Database::get();
+$config = require __DIR__ . '/../config/config.php';
+$selfDomain = $config['self_domain'] ?? '';
 
 function q(PDO $pdo, string $sql, array $params = []): array
 {
@@ -90,8 +92,9 @@ $topRefs = q($pdo,
     "SELECT referrer, COUNT(*) as cnt FROM pageviews
      WHERE created_at BETWEEN :s AND :e
      AND referrer != '' AND referrer IS NOT NULL
-     AND referrer NOT LIKE '%zurich-sailing.ch%'
-     GROUP BY referrer ORDER BY cnt DESC LIMIT 10", $p);
+     AND referrer NOT LIKE :self
+     GROUP BY referrer ORDER BY cnt DESC LIMIT 10",
+    $p + [':self' => '%' . $selfDomain . '%']);
 
 // Geräte
 $devices = q($pdo,
@@ -169,8 +172,8 @@ $deviceData   = array_column($devices, 'cnt');
         <div class="topbar-brand">
             <span class="topbar-icon">⛵</span>
             <div>
-                <span class="topbar-title">ZS Analytics</span>
-                <span class="topbar-sub">zurich-sailing.ch</span>
+                <span class="topbar-title"><?= htmlspecialchars($config['site_name'] ?? 'Analytics') ?></span>
+                <span class="topbar-sub"><?= htmlspecialchars($selfDomain) ?></span>
             </div>
         </div>
         <nav class="range-nav">

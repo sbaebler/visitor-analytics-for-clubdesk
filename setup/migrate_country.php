@@ -3,7 +3,7 @@
  * Migration: Fügt die Spalte `country` (VARCHAR 2) zur pageviews-Tabelle hinzu.
  * Einmalig ausführen, danach kann diese Datei gelöscht werden.
  *
- * Aufruf: https://stats.zurich-sailing.ch/setup/migrate_country.php?token=DEIN_TOKEN
+ * Aufruf: https://stats.YOUR-DOMAIN.COM/setup/migrate_country.php?token=DEIN_TOKEN
  */
 
 $configFile = __DIR__ . '/../config/config.php';

@@ -3,7 +3,7 @@
  * Einmalig ausführen, um die Datenbanktabellen zu erstellen.
  * Danach diese Datei löschen oder mit Passwort schützen.
  *
- * Aufruf: https://stats.zurich-sailing.ch/setup/install.php?token=DEIN_TOKEN
+ * Aufruf: https://stats.YOUR-DOMAIN.COM/setup/install.php?token=DEIN_TOKEN
  * (Token muss mit dem in config.php gesetzten INSTALL_TOKEN übereinstimmen)
  */
 

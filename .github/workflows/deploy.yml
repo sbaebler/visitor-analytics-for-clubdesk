@@ -12,8 +12,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # FTP-User ftp_stats@zurich-sailing.ch landet direkt in /home/vabavoco/public_html/stats
-      # → server-dir ist "/" (FTP-Root = Subdomain-Root)
       - name: Deploy via FTP to cyon
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:

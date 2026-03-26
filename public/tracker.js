@@ -1,12 +1,12 @@
 /**
- * zurich-sailing.ch Analytics Tracker
- * Cookielos, datenschutzkonform (DSG)
- * Einbinden via: <script src="https://stats.zurich-sailing.ch/tracker.js" defer></script>
+ * Clubdesk Analytics Tracker
+ * Cookieless, privacy-friendly (DSG/DSGVO)
+ * Usage: <script src="https://stats.YOUR-DOMAIN.COM/tracker.js" defer></script>
  */
 (function () {
   'use strict';
 
-  var ENDPOINT = 'https://stats.zurich-sailing.ch/collect.php';
+  var ENDPOINT = '/collect.php';
 
   // Clubdesk-Editor nicht tracken
   if (window.location.search.indexOf('edit=') !== -1) return;

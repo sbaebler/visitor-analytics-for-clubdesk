@@ -20,7 +20,11 @@ return [
     'install_token' => 'CHANGE_ME_INSTALL_TOKEN',
     // Erlaubte Quellen für den Tracker (CORS)
     'allowed_origins' => [
-        'https://www.zurich-sailing.ch',
-        'https://zurich-sailing.ch',
+        'https://www.YOUR-DOMAIN.COM',
+        'https://YOUR-DOMAIN.COM',
     ],
+    // Anzeigename im Dashboard und auf der Login-Seite
+    'site_name' => 'YOUR_SITE_NAME',
+    // Eigene Domain für Referrer-Filter (ohne https://, z.B. "YOUR-DOMAIN.COM")
+    'self_domain' => 'YOUR-DOMAIN.COM',
 ];

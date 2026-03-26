@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/Auth.php';
 
+$config = require __DIR__ . '/../config/config.php';
+
 // CSP für Login-Seite
 header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'");
 header('X-Content-Type-Options: nosniff');
@@ -130,8 +132,8 @@ $csrfToken = $_SESSION['csrf'];
 <body>
     <div class="card">
         <div class="logo">
-            <h1>⛵ ZS Analytics</h1>
-            <p>zurich-sailing.ch</p>
+            <h1>⛵ <?= htmlspecialchars($config['site_name'] ?? 'Analytics') ?></h1>
+            <p><?= htmlspecialchars($config['self_domain'] ?? '') ?></p>
         </div>
         <?php if ($error !== ''): ?>
             <div class="error"><?= htmlspecialchars($error) ?></div>
