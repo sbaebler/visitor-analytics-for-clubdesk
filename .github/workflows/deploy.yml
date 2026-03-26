@@ -28,3 +28,4 @@ jobs:
             **/.git*/**
             **/.DS_Store
             **/config/config.php
+            **/docs/**

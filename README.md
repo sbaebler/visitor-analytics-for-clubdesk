@@ -2,6 +2,8 @@
 
 Self-hosted, cookielose Besucherstatistiken für Websites auf [Clubdesk](https://www.clubdesk.com/).
 
+![Dashboard Screenshot](docs/dashboard.png)
+
 ## Voraussetzungen
 - PHP 8.1+
 - MariaDB 10.4+ oder MySQL 8+
