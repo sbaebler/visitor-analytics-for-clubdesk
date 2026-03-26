@@ -69,7 +69,7 @@ function getCountryCode(): ?string
     $ip = $_SERVER['REMOTE_ADDR'] ?? '';
     if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
         $ctx  = stream_context_create(['http' => ['timeout' => 2]]);
-        $json = @file_get_contents('http://ip-api.com/json/' . $ip . '?fields=countryCode', false, $ctx);
+        $json = @file_get_contents('https://ip-api.com/json/' . $ip . '?fields=countryCode', false, $ctx);
         if ($json !== false) {
             $data = json_decode($json, true);
             $code = strtoupper($data['countryCode'] ?? '');

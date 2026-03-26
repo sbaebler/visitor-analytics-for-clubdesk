@@ -2,8 +2,14 @@
 
 Self-hosted, cookielose Besucherstatistiken für Websites auf [Clubdesk](https://www.clubdesk.com/).
 
+## Voraussetzungen
+- PHP 8.1+
+- MariaDB 10.4+ oder MySQL 8+
+- PHP-Extensions: `pdo_mysql`, `json`, `mbstring`
+- Webhosting mit HTTPS (z.B. cyon.ch, Infomaniak, Hosttech)
+
 ## Stack
-- PHP 8.x + MariaDB (z.B. cyon.ch, Infomaniak, Hosttech)
+- PHP 8.x + MariaDB
 - Vanilla JavaScript Tracking-Snippet (~100 Zeilen)
 - Kein Cookie, kein Cookie-Banner (DSG-konform)
 
@@ -55,11 +61,10 @@ https://stats.YOUR-DOMAIN.COM/
 
 Das enthaltene Workflow-Template (`.github/workflows/deploy.yml`) deployed via FTPS.
 Folgende GitHub Secrets setzen:
-- `CYON_SFTP_HOST` – FTP-Server-Hostname
-- `CYON_SFTP_USER` – FTP-Benutzername
-- `CYON_SFTP_PASSWORD` – FTP-Passwort
-
-Den `server-dir` im Workflow an den eigenen Hosting-Pfad anpassen.
+- `FTP_HOST` – FTP-Server-Hostname
+- `FTP_USER` – FTP-Benutzername
+- `FTP_PASSWORD` – FTP-Passwort
+- `FTP_SERVER_DIR` – Zielpfad auf dem Server (z.B. `/public_html/stats/`)
 
 ## Sicherheitshinweise
 - `config/config.php` ist in `.gitignore` – nie committen

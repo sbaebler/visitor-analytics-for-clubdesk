@@ -2,8 +2,8 @@
 return [
     'db' => [
         'host'    => 'localhost',
-        'name'    => 'stats_zurich_sailing',  // Datenbankname bei cyon
-        'user'    => 'stats_user',            // DB-Benutzer bei cyon
+        'name'    => 'YOUR_DB_NAME',
+        'user'    => 'YOUR_DB_USER',
         'pass'    => 'CHANGE_ME',
         'charset' => 'utf8mb4',
     ],
