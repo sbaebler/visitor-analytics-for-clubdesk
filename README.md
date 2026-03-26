@@ -50,15 +50,16 @@ https://stats.YOUR-DOMAIN.COM/setup/install.php?token=DEIN_INSTALL_TOKEN
 
 ### 5. Tracker auf Clubdesk-Website einbinden
 
-Der Tracker wird über ein **HTML-Modul** in Clubdesk eingebunden, das auf allen Seiten erscheint:
-
-1. Im Clubdesk-Admin unter **Website → Design → HTML-Module** (oder «Globale Module») ein neues Modul erstellen
-2. Position: **Ende Body** (wichtig – nicht im Head)
-3. Folgenden Code einfügen:
+1. Im Browser [app.clubdesk.com](https://app.clubdesk.com) öffnen und ins **Webseiten-Modul** wechseln
+2. Die gewünschte Website auswählen und oben auf **Einstellungen → Optionen** klicken
+3. Im linken Menü unter **Code-Fragmente** auf **BODY-Ende** klicken
+4. Folgenden Code einfügen:
 ```html
 <script src="https://stats.YOUR-DOMAIN.COM/tracker.js" defer></script>
 ```
-4. Modul auf **allen Seiten** aktivieren
+5. **Speichern**
+
+Der Code wird damit automatisch auf allen Seiten der Website kurz vor `</body>` eingefügt.
 
 **Hinweis:** Der Tracker erkennt automatisch, wenn eine Seite im Clubdesk-Editor geöffnet ist (`?edit=` Parameter), und sendet in diesem Fall keine Daten. Editor-Aufrufe werden also nicht mitgezählt.
 
