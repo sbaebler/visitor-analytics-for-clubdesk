@@ -1,4 +1,4 @@
-name: Deploy to cyon.ch
+name: Deploy via FTP
 
 on:
   push:
@@ -12,12 +12,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy via FTP to cyon
+      - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server:   ${{ secrets.CYON_SFTP_HOST }}
-          username: ${{ secrets.CYON_SFTP_USER }}
-          password: ${{ secrets.CYON_SFTP_PASSWORD }}
+          server:   ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port:     21
           local-dir:  ./
