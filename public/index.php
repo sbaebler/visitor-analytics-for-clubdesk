@@ -88,13 +88,15 @@ $topPages = q($pdo,
      GROUP BY url, page_title ORDER BY views DESC LIMIT 15', $p);
 
 // Top-Referrer (nur externe)
+$selfFilter = $selfDomain !== '' ? 'AND referrer NOT LIKE :self' : '';
+$selfParams = $selfDomain !== '' ? [':self' => '%' . $selfDomain . '%'] : [];
 $topRefs = q($pdo,
     "SELECT referrer, COUNT(*) as cnt FROM pageviews
      WHERE created_at BETWEEN :s AND :e
      AND referrer != '' AND referrer IS NOT NULL
-     AND referrer NOT LIKE :self
+     {$selfFilter}
      GROUP BY referrer ORDER BY cnt DESC LIMIT 10",
-    $p + [':self' => '%' . $selfDomain . '%']);
+    $p + $selfParams);
 
 // Geräte
 $devices = q($pdo,
