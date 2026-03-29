@@ -95,37 +95,26 @@ var ZSDash = (function () {
     });
   }
 
-  function initUptimeChart(labels, zsData, cdData) {
+  function initUptimeChart(labels, datasets, datasetLabels) {
     var ctx = document.getElementById('uptimeChart');
-    if (!ctx) return;
+    if (!ctx || !datasets.length) return;
+    var colors = [NAVY, BLUE, BLUE_L, '#FF9800'];
     new Chart(ctx, {
       type: 'line',
       data: {
         labels: labels,
-        datasets: [
-          {
-            label: 'zurich-sailing.ch',
-            data: zsData,
-            borderColor: NAVY,
-            backgroundColor: 'rgba(10,35,66,.08)',
+        datasets: datasets.map(function (data, i) {
+          return {
+            label: datasetLabels[i] || ('Ziel ' + (i + 1)),
+            data: data,
+            borderColor: colors[i % colors.length],
             borderWidth: 2,
             pointRadius: 3,
             fill: false,
             tension: 0.3,
             spanGaps: true,
-          },
-          {
-            label: 'app.clubdesk.com',
-            data: cdData,
-            borderColor: BLUE,
-            backgroundColor: 'rgba(33,150,243,.08)',
-            borderWidth: 2,
-            pointRadius: 3,
-            fill: false,
-            tension: 0.3,
-            spanGaps: true,
-          },
-        ],
+          };
+        }),
       },
       options: {
         responsive: true,
@@ -165,8 +154,8 @@ var ZSDash = (function () {
       initLineChart(labels, pvData, uvData);
       initDeviceChart(deviceLabels, deviceData);
     },
-    initUptime: function (labels, zsData, cdData) {
-      initUptimeChart(labels, zsData, cdData);
+    initUptime: function (labels, datasets, datasetLabels) {
+      initUptimeChart(labels, datasets, datasetLabels);
     },
   };
 })();

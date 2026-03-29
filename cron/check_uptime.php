@@ -20,11 +20,8 @@ if (PHP_SAPI !== 'cli') {
 require_once __DIR__ . '/../src/Database.php';
 
 // --- Konfiguration ---
-$targets = [
-    ['name' => 'zurich-sailing', 'url' => 'https://zurich-sailing.ch'],
-    ['name' => 'clubdesk',       'url' => 'https://app.clubdesk.com'],
-    ['name' => 'reference',      'url' => 'https://google.com'],
-];
+$config  = require __DIR__ . '/../config/config.php';
+$targets = $config['uptime_targets'] ?? [];
 
 const TIMEOUT      = 10;
 const MAX_REDIRECTS = 5;

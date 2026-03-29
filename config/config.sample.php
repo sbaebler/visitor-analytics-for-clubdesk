@@ -27,4 +27,11 @@ return [
     'site_name' => 'YOUR_SITE_NAME',
     // Eigene Domain für Referrer-Filter (ohne https://, z.B. "YOUR-DOMAIN.COM")
     'self_domain' => 'YOUR-DOMAIN.COM',
+    // Uptime-Monitoring: zu überwachende Ziele
+    // 'reference' => true markiert ein Ziel als Referenz (erscheint in Status-Karten, nicht in Uptime-Auswertung)
+    'uptime_targets' => [
+        ['name' => 'main-site',  'url' => 'https://YOUR-DOMAIN.COM',  'reference' => false],
+        ['name' => 'clubdesk',   'url' => 'https://app.clubdesk.com', 'reference' => false],
+        ['name' => 'reference',  'url' => 'https://google.com',        'reference' => true],
+    ],
 ];

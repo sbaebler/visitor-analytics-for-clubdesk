@@ -135,20 +135,23 @@ if ($hasCmsCol && $view === 'real') {
 }
 
 // --- Uptime-Monitoring (graceful degradation) ---
-$hasUptimeTable    = false;
+$hasUptimeTable  = false;
+$uptimeTargets   = $config['uptime_targets'] ?? [];
+$mainTargets     = array_values(array_filter($uptimeTargets, fn($t) => !($t['reference'] ?? false)));
+$mainTargetNames = array_column($mainTargets, 'name');
+
 $uptimeStatus      = [];
 $uptimeStats       = [];
 $uptimeErrors      = [];
 $uptimeChartLabels = [];
-$uptimeChartZS     = [];
-$uptimeChartCD     = [];
+$uptimeChartData   = [];
 $uptimeCorrelation = false;
 
 try {
     $hasUptimeTable = (bool) $pdo->query("SHOW TABLES LIKE 'uptime_checks'")->fetch();
 } catch (PDOException $e) {}
 
-if ($hasUptimeTable) {
+if ($hasUptimeTable && !empty($uptimeTargets)) {
     // Aktueller Status je Target (letzter Eintrag pro Target)
     $statusRows = q($pdo,
         "SELECT uc.target_name, uc.success, uc.http_status, uc.response_time_ms,
@@ -163,25 +166,70 @@ if ($hasUptimeTable) {
         $uptimeStatus[$row['target_name']] = $row;
     }
 
-    // Uptime-Statistik (24h / 7d / 30d) für zurich-sailing und clubdesk
-    $statsRows = q($pdo,
-        "SELECT target_name,
-                SUM(CASE WHEN check_time >= NOW() - INTERVAL 1 DAY THEN 1 ELSE 0 END)                    AS total_24h,
-                SUM(CASE WHEN check_time >= NOW() - INTERVAL 1 DAY AND success = 1 THEN 1 ELSE 0 END)    AS ok_24h,
-                SUM(CASE WHEN check_time >= NOW() - INTERVAL 7 DAY THEN 1 ELSE 0 END)                    AS total_7d,
-                SUM(CASE WHEN check_time >= NOW() - INTERVAL 7 DAY AND success = 1 THEN 1 ELSE 0 END)    AS ok_7d,
-                COUNT(*)                                                                                    AS total_30d,
-                SUM(success)                                                                                AS ok_30d
-         FROM uptime_checks
-         WHERE target_name IN ('zurich-sailing', 'clubdesk')
-           AND check_time >= NOW() - INTERVAL 30 DAY
-         GROUP BY target_name"
-    );
-    foreach ($statsRows as $row) {
-        $n = $row['target_name'];
-        $uptimeStats[$n]['24h'] = $row['total_24h'] > 0 ? round($row['ok_24h'] / $row['total_24h'] * 100, 1) : null;
-        $uptimeStats[$n]['7d']  = $row['total_7d']  > 0 ? round($row['ok_7d']  / $row['total_7d']  * 100, 1) : null;
-        $uptimeStats[$n]['30d'] = $row['total_30d'] > 0 ? round($row['ok_30d'] / $row['total_30d'] * 100, 1) : null;
+    if (!empty($mainTargetNames)) {
+        $ph = implode(',', array_fill(0, count($mainTargetNames), '?'));
+
+        // Uptime-Statistik (24h / 7d / 30d)
+        $statsRows = q($pdo,
+            "SELECT target_name,
+                    SUM(CASE WHEN check_time >= NOW() - INTERVAL 1 DAY THEN 1 ELSE 0 END)                 AS total_24h,
+                    SUM(CASE WHEN check_time >= NOW() - INTERVAL 1 DAY AND success = 1 THEN 1 ELSE 0 END) AS ok_24h,
+                    SUM(CASE WHEN check_time >= NOW() - INTERVAL 7 DAY THEN 1 ELSE 0 END)                 AS total_7d,
+                    SUM(CASE WHEN check_time >= NOW() - INTERVAL 7 DAY AND success = 1 THEN 1 ELSE 0 END) AS ok_7d,
+                    COUNT(*)                                                                                AS total_30d,
+                    SUM(success)                                                                            AS ok_30d
+             FROM uptime_checks
+             WHERE target_name IN ({$ph})
+               AND check_time >= NOW() - INTERVAL 30 DAY
+             GROUP BY target_name",
+            $mainTargetNames
+        );
+        foreach ($statsRows as $row) {
+            $n = $row['target_name'];
+            $uptimeStats[$n]['24h'] = $row['total_24h'] > 0 ? round($row['ok_24h'] / $row['total_24h'] * 100, 1) : null;
+            $uptimeStats[$n]['7d']  = $row['total_7d']  > 0 ? round($row['ok_7d']  / $row['total_7d']  * 100, 1) : null;
+            $uptimeStats[$n]['30d'] = $row['total_30d'] > 0 ? round($row['ok_30d'] / $row['total_30d'] * 100, 1) : null;
+        }
+
+        // Korrelation: gleichzeitige Ausfälle mehrerer Hauptziele (letzten 30 Tage)
+        if (count($mainTargetNames) >= 2) {
+            $uptimeCorrelation = (bool) qVal($pdo,
+                "SELECT COUNT(*) FROM (
+                    SELECT check_time FROM uptime_checks
+                    WHERE target_name IN ({$ph}) AND success = 0
+                      AND check_time >= NOW() - INTERVAL 30 DAY
+                    GROUP BY check_time HAVING COUNT(DISTINCT target_name) >= 2
+                ) sub",
+                $mainTargetNames
+            );
+        }
+
+        // Antwortzeit-Chart: stündliche Durchschnitte, letzte 24h
+        $chartRows = q($pdo,
+            "SELECT target_name,
+                    DATE_FORMAT(check_time, '%Y-%m-%d %H') AS hour_key,
+                    DATE_FORMAT(check_time, '%H:00')        AS hour_label,
+                    ROUND(AVG(response_time_ms))             AS avg_ms
+             FROM uptime_checks
+             WHERE target_name IN ({$ph})
+               AND check_time >= NOW() - INTERVAL 24 HOUR
+               AND success = 1 AND response_time_ms IS NOT NULL
+             GROUP BY target_name, DATE_FORMAT(check_time, '%Y-%m-%d %H')
+             ORDER BY MIN(check_time) ASC",
+            $mainTargetNames
+        );
+        $rawChart = [];
+        $hourMap  = [];
+        foreach ($chartRows as $row) {
+            $rawChart[$row['target_name']][$row['hour_key']] = (int)$row['avg_ms'];
+            $hourMap[$row['hour_key']] = $row['hour_label'];
+        }
+        ksort($hourMap);
+        $sortedKeys        = array_keys($hourMap);
+        $uptimeChartLabels = array_values($hourMap);
+        foreach ($mainTargets as $t) {
+            $uptimeChartData[] = array_map(fn($k) => $rawChart[$t['name']][$k] ?? null, $sortedKeys);
+        }
     }
 
     // Letzte 10 Fehler
@@ -190,40 +238,6 @@ if ($hasUptimeTable) {
          FROM uptime_checks WHERE success = 0
          ORDER BY check_time DESC LIMIT 10"
     );
-
-    // Korrelation: gleichzeitige Ausfälle beider Hauptziele (letzten 30 Tage)
-    $uptimeCorrelation = (bool) qVal($pdo,
-        "SELECT COUNT(*) FROM uptime_checks zs
-         JOIN uptime_checks cd ON zs.check_time = cd.check_time
-         WHERE zs.target_name = 'zurich-sailing' AND zs.success = 0
-           AND cd.target_name = 'clubdesk' AND cd.success = 0
-           AND zs.check_time >= NOW() - INTERVAL 30 DAY"
-    );
-
-    // Antwortzeit-Chart: stündliche Durchschnitte, letzte 24h
-    $chartRows = q($pdo,
-        "SELECT target_name,
-                DATE_FORMAT(check_time, '%Y-%m-%d %H') AS hour_key,
-                DATE_FORMAT(check_time, '%H:00')        AS hour_label,
-                ROUND(AVG(response_time_ms))             AS avg_ms
-         FROM uptime_checks
-         WHERE target_name IN ('zurich-sailing', 'clubdesk')
-           AND check_time >= NOW() - INTERVAL 24 HOUR
-           AND success = 1 AND response_time_ms IS NOT NULL
-         GROUP BY target_name, DATE_FORMAT(check_time, '%Y-%m-%d %H')
-         ORDER BY MIN(check_time) ASC"
-    );
-    $rawChart = [];
-    $hourMap  = [];
-    foreach ($chartRows as $row) {
-        $rawChart[$row['target_name']][$row['hour_key']] = (int)$row['avg_ms'];
-        $hourMap[$row['hour_key']] = $row['hour_label'];
-    }
-    ksort($hourMap);
-    $sortedKeys        = array_keys($hourMap);
-    $uptimeChartLabels = array_values($hourMap);
-    $uptimeChartZS     = array_map(fn($k) => $rawChart['zurich-sailing'][$k] ?? null, $sortedKeys);
-    $uptimeChartCD     = array_map(fn($k) => $rawChart['clubdesk'][$k] ?? null, $sortedKeys);
 }
 
 // --- Hilfsfunktionen ---
@@ -255,6 +269,11 @@ function countryFlag(string $code): string
         $flag .= mb_convert_encoding('&#' . $cp . ';', 'UTF-8', 'HTML-ENTITIES');
     }
     return $flag;
+}
+
+function uptimeLabel(array $t): string
+{
+    return $t['label'] ?? preg_replace('#^https?://#', '', $t['url']);
 }
 
 function shortDomain(string $url): string
@@ -505,15 +524,8 @@ $deviceData   = array_column($devices, 'cnt');
         </div>
         <?php endif; ?>
 
-        <?php if ($hasUptimeTable): ?>
+        <?php if ($hasUptimeTable && !empty($uptimeTargets)): ?>
         <!-- Verfügbarkeit -->
-        <?php
-        $displayTargets = [
-            'zurich-sailing' => 'zurich-sailing.ch',
-            'clubdesk'       => 'app.clubdesk.com',
-            'reference'      => 'google.com',
-        ];
-        ?>
         <div class="card">
             <div class="card-header">
                 <h2 class="card-title">Verfügbarkeit</h2>
@@ -521,19 +533,19 @@ $deviceData   = array_column($devices, 'cnt');
 
             <!-- Aktueller Status -->
             <div class="uptime-status-grid">
-                <?php foreach ($displayTargets as $tName => $tDisplay): ?>
+                <?php foreach ($uptimeTargets as $t): ?>
                 <?php
-                    $s = $uptimeStatus[$tName] ?? null;
+                    $s = $uptimeStatus[$t['name']] ?? null;
                     $timeAgo = '';
                     if ($s) {
                         $diff = $now->getTimestamp() - (new DateTimeImmutable($s['check_time'], $tz))->getTimestamp();
-                        if ($diff < 120)    $timeAgo = 'vor ' . $diff . ' Sek.';
+                        if ($diff < 120)      $timeAgo = 'vor ' . $diff . ' Sek.';
                         elseif ($diff < 3600) $timeAgo = 'vor ' . floor($diff / 60) . ' Min.';
-                        else                $timeAgo = 'vor ' . floor($diff / 3600) . ' Std.';
+                        else                  $timeAgo = 'vor ' . floor($diff / 3600) . ' Std.';
                     }
                 ?>
                 <div class="uptime-status-card">
-                    <div class="uptime-target-name"><?= htmlspecialchars($tDisplay) ?></div>
+                    <div class="uptime-target-name"><?= htmlspecialchars(uptimeLabel($t)) ?></div>
                     <?php if ($s === null): ?>
                         <div class="uptime-badge uptime-unknown">Keine Daten</div>
                     <?php elseif ($s['success']): ?>
@@ -555,17 +567,17 @@ $deviceData   = array_column($devices, 'cnt');
                 <?php endforeach; ?>
             </div>
 
-            <!-- Uptime-Statistik -->
+            <!-- Uptime-Statistik (nur Hauptziele) -->
             <table class="data-table">
                 <thead>
                     <tr><th>Ziel</th><th>24 Std.</th><th>7 Tage</th><th>30 Tage</th></tr>
                 </thead>
                 <tbody>
-                    <?php foreach (['zurich-sailing' => 'zurich-sailing.ch', 'clubdesk' => 'app.clubdesk.com'] as $tName => $tDisplay): ?>
+                    <?php foreach ($mainTargets as $t): ?>
                     <tr>
-                        <td><?= htmlspecialchars($tDisplay) ?></td>
+                        <td><?= htmlspecialchars(uptimeLabel($t)) ?></td>
                         <?php foreach (['24h', '7d', '30d'] as $period): ?>
-                            <?php $pct = $uptimeStats[$tName][$period] ?? null; ?>
+                            <?php $pct = $uptimeStats[$t['name']][$period] ?? null; ?>
                             <td class="num <?= $pct === null ? '' : ($pct >= 99 ? 'uptime-ok' : ($pct >= 90 ? 'uptime-warn' : 'uptime-err')) ?>">
                                 <?= $pct !== null ? number_format($pct, 1) . '%' : '–' ?>
                             </td>
@@ -577,7 +589,7 @@ $deviceData   = array_column($devices, 'cnt');
 
             <?php if ($uptimeCorrelation): ?>
             <div class="uptime-correlation-hint">
-                Gemeinsame Ausfälle erkannt: <strong>zurich-sailing.ch</strong> und <strong>app.clubdesk.com</strong> waren in den letzten 30 Tagen gleichzeitig nicht erreichbar – deutet auf ein Clubdesk-seitiges Problem hin.
+                Gemeinsame Ausfälle erkannt: mehrere überwachte Ziele waren in den letzten 30 Tagen gleichzeitig nicht erreichbar.
             </div>
             <?php endif; ?>
         </div>
@@ -610,7 +622,8 @@ $deviceData   = array_column($devices, 'cnt');
                     <?php foreach ($uptimeErrors as $err): ?>
                     <tr>
                         <td><?= htmlspecialchars($err['check_time']) ?></td>
-                        <td><?= htmlspecialchars($displayTargets[$err['target_name']] ?? $err['target_name']) ?></td>
+                        <?php $errLabel = uptimeLabel(array_values(array_filter($uptimeTargets, fn($t) => $t['name'] === $err['target_name']))[0] ?? ['url' => $err['target_name']]); ?>
+                        <td><?= htmlspecialchars($errLabel) ?></td>
                         <td><?= htmlspecialchars($err['error_type'] ?? $err['error_message'] ?? '–') ?></td>
                         <td class="num"><?= $err['http_status'] ? (int)$err['http_status'] : '–' ?></td>
                     </tr>
@@ -637,8 +650,8 @@ $deviceData   = array_column($devices, 'cnt');
         <?php if ($hasUptimeTable && count($uptimeChartLabels) >= 2): ?>
         ZSDash.initUptime(
             <?= json_encode($uptimeChartLabels) ?>,
-            <?= json_encode($uptimeChartZS) ?>,
-            <?= json_encode($uptimeChartCD) ?>
+            <?= json_encode($uptimeChartData) ?>,
+            <?= json_encode(array_map('uptimeLabel', $mainTargets)) ?>
         );
         <?php endif; ?>
     </script>
