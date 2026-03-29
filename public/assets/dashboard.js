@@ -95,10 +95,78 @@ var ZSDash = (function () {
     });
   }
 
+  function initUptimeChart(labels, zsData, cdData) {
+    var ctx = document.getElementById('uptimeChart');
+    if (!ctx) return;
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'zurich-sailing.ch',
+            data: zsData,
+            borderColor: NAVY,
+            backgroundColor: 'rgba(10,35,66,.08)',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: false,
+            tension: 0.3,
+            spanGaps: true,
+          },
+          {
+            label: 'app.clubdesk.com',
+            data: cdData,
+            borderColor: BLUE,
+            backgroundColor: 'rgba(33,150,243,.08)',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: false,
+            tension: 0.3,
+            spanGaps: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { font: { size: 12 }, boxWidth: 12, padding: 16 },
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                return ' ' + ctx.dataset.label + ': ' + ctx.parsed.y + ' ms';
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 11 }, maxTicksLimit: 12 },
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Antwortzeit (ms)', font: { size: 11 } },
+            grid: { color: 'rgba(0,0,0,.05)' },
+            ticks: { font: { size: 11 }, precision: 0 },
+          },
+        },
+      },
+    });
+  }
+
   return {
     init: function (labels, pvData, uvData, deviceLabels, deviceData) {
       initLineChart(labels, pvData, uvData);
       initDeviceChart(deviceLabels, deviceData);
+    },
+    initUptime: function (labels, zsData, cdData) {
+      initUptimeChart(labels, zsData, cdData);
     },
   };
 })();
