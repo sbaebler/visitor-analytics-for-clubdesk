@@ -563,7 +563,7 @@ $deviceData   = array_column($devices, 'cnt');
                 <tbody>
                     <?php foreach (['zurich-sailing' => 'zurich-sailing.ch', 'clubdesk' => 'app.clubdesk.com'] as $tName => $tDisplay): ?>
                     <tr>
-                        <td class="url-path"><?= htmlspecialchars($tDisplay) ?></td>
+                        <td><?= htmlspecialchars($tDisplay) ?></td>
                         <?php foreach (['24h', '7d', '30d'] as $period): ?>
                             <?php $pct = $uptimeStats[$tName][$period] ?? null; ?>
                             <td class="num <?= $pct === null ? '' : ($pct >= 99 ? 'uptime-ok' : ($pct >= 90 ? 'uptime-warn' : 'uptime-err')) ?>">
@@ -583,16 +583,18 @@ $deviceData   = array_column($devices, 'cnt');
         </div>
 
         <!-- Antwortzeiten-Chart -->
-        <?php if (!empty($uptimeChartLabels)): ?>
         <div class="card">
             <div class="card-header">
                 <h2 class="card-title">Antwortzeiten – letzte 24 Stunden</h2>
             </div>
+            <?php if (count($uptimeChartLabels) >= 2): ?>
             <div class="chart-wrap">
                 <canvas id="uptimeChart"></canvas>
             </div>
+            <?php else: ?>
+            <p class="uptime-no-data">Noch zu wenig Daten – wird nach einigen Messungen angezeigt.</p>
+            <?php endif; ?>
         </div>
-        <?php endif; ?>
 
         <!-- Letzte Fehler -->
         <?php if (!empty($uptimeErrors)): ?>
@@ -632,7 +634,7 @@ $deviceData   = array_column($devices, 'cnt');
             <?= json_encode($deviceLabels) ?>,
             <?= json_encode($deviceData) ?>
         );
-        <?php if ($hasUptimeTable && !empty($uptimeChartLabels)): ?>
+        <?php if ($hasUptimeTable && count($uptimeChartLabels) >= 2): ?>
         ZSDash.initUptime(
             <?= json_encode($uptimeChartLabels) ?>,
             <?= json_encode($uptimeChartZS) ?>,

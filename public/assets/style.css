@@ -384,6 +384,13 @@ a.url-path:hover { text-decoration: underline; color: var(--blue); }
     color: #92400E;
 }
 
+.uptime-no-data {
+    padding: 1.5rem 1.25rem;
+    color: var(--muted);
+    font-style: italic;
+    font-size: .85rem;
+}
+
 @media (max-width: 600px) {
     .uptime-status-grid { grid-template-columns: 1fr; }
 }
