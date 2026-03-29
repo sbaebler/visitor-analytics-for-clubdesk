@@ -16,6 +16,10 @@ $range = $_GET['range'] ?? '30d';
 $validRanges = ['today', '7d', '30d', 'month', 'lastmonth'];
 if (!in_array($range, $validRanges, true)) $range = '30d';
 
+$view = $_GET['view'] ?? 'real';
+if (!in_array($view, ['real', 'cms'], true)) $view = 'real';
+$isCmsFilter = ($view === 'cms') ? 1 : 0;
+
 $tz = new DateTimeZone('Europe/Zurich');
 $now = new DateTimeImmutable('now', $tz);
 
@@ -70,22 +74,27 @@ function qVal(PDO $pdo, string $sql, array $params = []): mixed
 
 $p = [':s' => $startStr, ':e' => $endStr];
 
-$totalPageviews   = (int) qVal($pdo, 'SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e', $p);
-$uniqueVisitors   = (int) qVal($pdo, 'SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e', $p);
-$avgDuration      = (float) qVal($pdo, 'SELECT AVG(duration) FROM pageviews WHERE created_at BETWEEN :s AND :e AND duration > 0 AND duration < 3600', $p);
-$outboundClicks   = (int) qVal($pdo, "SELECT COUNT(*) FROM events WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'", $p);
+// Graceful Degradation: Filter nur anwenden wenn Spalte existiert
+$hasCmsCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'is_cms'")->fetch();
+$cmsCondition = $hasCmsCol ? ' AND is_cms = :cms' : '';
+if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
+
+$totalPageviews   = (int) qVal($pdo, "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}", $p);
+$uniqueVisitors   = (int) qVal($pdo, "SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}", $p);
+$avgDuration      = (float) qVal($pdo, "SELECT AVG(duration) FROM pageviews WHERE created_at BETWEEN :s AND :e AND duration > 0 AND duration < 3600{$cmsCondition}", $p);
+$outboundClicks   = $view === 'cms' ? 0 : (int) qVal($pdo, "SELECT COUNT(*) FROM events WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'", [':s' => $startStr, ':e' => $endStr]);
 
 // Tägliche Übersicht für Chart
 $dailyRows = q($pdo,
-    'SELECT DATE(created_at) as d, COUNT(*) as pv, COUNT(DISTINCT fingerprint) as uv
-     FROM pageviews WHERE created_at BETWEEN :s AND :e
-     GROUP BY DATE(created_at) ORDER BY d ASC', $p);
+    "SELECT DATE(created_at) as d, COUNT(*) as pv, COUNT(DISTINCT fingerprint) as uv
+     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     GROUP BY DATE(created_at) ORDER BY d ASC", $p);
 
 // Top-Seiten (Pfad ohne Domain anzeigen)
 $topPages = q($pdo,
-    'SELECT url, page_title, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-     FROM pageviews WHERE created_at BETWEEN :s AND :e
-     GROUP BY url, page_title ORDER BY views DESC LIMIT 15', $p);
+    "SELECT url, page_title, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
+     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     GROUP BY url, page_title ORDER BY views DESC LIMIT 15", $p);
 
 // Top-Referrer (nur externe)
 $selfFilter = $selfDomain !== '' ? 'AND referrer NOT LIKE :self' : '';
@@ -94,27 +103,36 @@ $topRefs = q($pdo,
     "SELECT referrer, COUNT(*) as cnt FROM pageviews
      WHERE created_at BETWEEN :s AND :e
      AND referrer != '' AND referrer IS NOT NULL
-     {$selfFilter}
+     {$selfFilter}{$cmsCondition}
      GROUP BY referrer ORDER BY cnt DESC LIMIT 10",
     $p + $selfParams);
 
 // Geräte
 $devices = q($pdo,
-    'SELECT device_type, COUNT(*) as cnt FROM pageviews
-     WHERE created_at BETWEEN :s AND :e
-     GROUP BY device_type ORDER BY cnt DESC', $p);
+    "SELECT device_type, COUNT(*) as cnt FROM pageviews
+     WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     GROUP BY device_type ORDER BY cnt DESC", $p);
 
 // Top Länder
 $topCountries = q($pdo,
     "SELECT country, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-     FROM pageviews WHERE created_at BETWEEN :s AND :e AND country IS NOT NULL
+     FROM pageviews WHERE created_at BETWEEN :s AND :e AND country IS NOT NULL{$cmsCondition}
      GROUP BY country ORDER BY visitors DESC LIMIT 10", $p);
 
-// Externe Links
-$outboundLinks = q($pdo,
+// Externe Links (nur im Besucher-View)
+$outboundLinks = $view === 'cms' ? [] : q($pdo,
     "SELECT event_value, COUNT(*) as clicks FROM events
      WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'
-     GROUP BY event_value ORDER BY clicks DESC LIMIT 10", $p);
+     GROUP BY event_value ORDER BY clicks DESC LIMIT 10", [':s' => $startStr, ':e' => $endStr]);
+
+// CMS-Zähler für Info-Banner (nur im Besucher-View)
+$cmsCount = 0;
+if ($hasCmsCol && $view === 'real') {
+    $cmsCount = (int) qVal($pdo,
+        'SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e AND is_cms = 1',
+        [':s' => $startStr, ':e' => $endStr]
+    );
+}
 
 // --- Hilfsfunktionen ---
 function formatDuration(float $secs): string
@@ -180,10 +198,14 @@ $deviceData   = array_column($devices, 'cnt');
         </div>
         <nav class="range-nav">
             <?php foreach (['today' => 'Heute', '7d' => '7 Tage', '30d' => '30 Tage', 'month' => 'Monat', 'lastmonth' => 'Vormonat'] as $key => $lbl): ?>
-                <a href="/?range=<?= $key ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
+                <a href="/?range=<?= $key ?>&view=<?= $view ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
                     <?= $lbl ?>
                 </a>
             <?php endforeach; ?>
+        </nav>
+        <nav class="view-nav">
+            <a href="/?range=<?= $range ?>&view=real" class="range-btn <?= $view === 'real' ? 'active' : '' ?>">Besucher</a>
+            <a href="/?range=<?= $range ?>&view=cms"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>">CMS</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>
@@ -213,6 +235,13 @@ $deviceData   = array_column($devices, 'cnt');
                 <div class="kpi-sub">Outbound Links</div>
             </div>
         </div>
+
+        <?php if ($cmsCount > 0): ?>
+        <div class="cms-hint">
+            <?= number_format($cmsCount, 0, '.', "'") ?> CMS-Aufrufe im gleichen Zeitraum –
+            <a href="/?range=<?= $range ?>&view=cms">anzeigen &rarr;</a>
+        </div>
+        <?php endif; ?>
 
         <!-- Verlauf-Chart -->
         <div class="card">

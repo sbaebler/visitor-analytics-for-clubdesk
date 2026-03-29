@@ -45,12 +45,16 @@ try {
             device_type ENUM('desktop','mobile','tablet') NOT NULL DEFAULT 'desktop',
             screen_width SMALLINT UNSIGNED,
             lang        VARCHAR(32),
+            country     VARCHAR(2) DEFAULT NULL,
+            is_cms      TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
             duration    INT UNSIGNED DEFAULT NULL,
             created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_view_id    (view_id),
             INDEX idx_fingerprint (fingerprint),
             INDEX idx_created_at (created_at),
-            INDEX idx_url        (url(255))
+            INDEX idx_url        (url(255)),
+            INDEX idx_country    (country),
+            INDEX idx_is_cms     (is_cms)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 

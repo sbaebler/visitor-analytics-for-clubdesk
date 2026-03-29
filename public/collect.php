@@ -109,10 +109,11 @@ try {
         $lang    = sanitizeStr($data['lang'] ?? '', 32);
 
         $country = getCountryCode();
+        $isCms   = str_contains($url, 'app.clubdesk.com') ? 1 : 0;
 
         $stmt = $pdo->prepare(
-            'INSERT INTO pageviews (view_id, fingerprint, url, page_title, referrer, device_type, screen_width, lang, country)
-             VALUES (:view_id, :fp, :url, :title, :ref, :device, :width, :lang, :country)'
+            'INSERT INTO pageviews (view_id, fingerprint, url, page_title, referrer, device_type, screen_width, lang, country, is_cms)
+             VALUES (:view_id, :fp, :url, :title, :ref, :device, :width, :lang, :country, :is_cms)'
         );
         $stmt->execute([
             ':view_id'  => $viewId,
@@ -124,6 +125,7 @@ try {
             ':width'    => $width,
             ':lang'     => $lang,
             ':country'  => $country,
+            ':is_cms'   => $isCms,
         ]);
 
     } elseif ($type === 'duration') {
