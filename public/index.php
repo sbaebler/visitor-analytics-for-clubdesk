@@ -204,8 +204,8 @@ $deviceData   = array_column($devices, 'cnt');
             <?php endforeach; ?>
         </nav>
         <nav class="view-nav">
-            <a href="/?range=<?= $range ?>&view=real" class="range-btn <?= $view === 'real' ? 'active' : '' ?>">Besucher</a>
-            <a href="/?range=<?= $range ?>&view=cms"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>">CMS</a>
+            <a href="/?range=<?= $range ?>&view=real" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
+            <a href="/?range=<?= $range ?>&view=cms"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>
@@ -220,9 +220,9 @@ $deviceData   = array_column($devices, 'cnt');
                 <div class="kpi-sub"><?= $label ?></div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-label">Unique Visitors</div>
+                <div class="kpi-label"><span class="hint" title="Anzahl unterschiedlicher Besucher im Zeitraum">Unique Visitors</span></div>
                 <div class="kpi-value"><?= number_format($uniqueVisitors, 0, '.', "'") ?></div>
-                <div class="kpi-sub">cookielos geschätzt</div>
+                <div class="kpi-sub"><span class="hint" title="Besucher werden ohne Cookies anhand eines anonymen Browser-Fingerprints erkannt – datenschutzkonform, aber eine Schätzung">cookielos geschätzt</span></div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-label">Ø Verweildauer</div>
@@ -238,7 +238,7 @@ $deviceData   = array_column($devices, 'cnt');
 
         <?php if ($cmsCount > 0): ?>
         <div class="cms-hint">
-            <?= number_format($cmsCount, 0, '.', "'") ?> CMS-Aufrufe im gleichen Zeitraum –
+            <?= number_format($cmsCount, 0, '.', "'") ?> <span class="hint" title="Seitenaufrufe durch Redakteure im Clubdesk-Editor – in der Besucher-Ansicht ausgeblendet">CMS-Aufrufe</span> im gleichen Zeitraum –
             <a href="/?range=<?= $range ?>&view=cms">anzeigen &rarr;</a>
         </div>
         <?php endif; ?>

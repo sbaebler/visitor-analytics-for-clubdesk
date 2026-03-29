@@ -303,6 +303,12 @@ a.url-path:hover { text-decoration: underline; color: var(--blue); }
     .content  { padding: 1rem; }
 }
 
+/* ===== Tooltip-Hilfetext ===== */
+.hint {
+    border-bottom: 1px dotted var(--muted);
+    cursor: help;
+}
+
 /* ===== CMS-Hinweis-Banner ===== */
 .cms-hint {
     background: #EBF5FF;
