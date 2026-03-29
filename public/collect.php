@@ -102,7 +102,7 @@ function normalizePageUrl(string $url): array
     if ($host === 'app.clubdesk.com') return [$url, $host];
 
     // Clubdesk-Subdomain: erste Pfadkomponente (Site-ID) entfernen
-    // z.B. /zsv-sstr54/foo → /foo
+    // z.B. /myclub-abc123/foo → /foo
     if (str_ends_with($host, '.clubdesk.com')) {
         $path = preg_replace('#^/[^/]+#', '', $path) ?: '/';
     }
