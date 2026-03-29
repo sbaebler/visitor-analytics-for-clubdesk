@@ -92,6 +92,25 @@ function sanitizeStr(string $s, int $max = 512): string
     return mb_substr(strip_tags($s), 0, $max);
 }
 
+function normalizePageUrl(string $url): array
+{
+    $host  = parse_url($url, PHP_URL_HOST) ?? '';
+    $path  = parse_url($url, PHP_URL_PATH) ?? '/';
+    $query = parse_url($url, PHP_URL_QUERY);
+
+    // CMS-Editor-URLs unveränderlich lassen
+    if ($host === 'app.clubdesk.com') return [$url, $host];
+
+    // Clubdesk-Subdomain: erste Pfadkomponente (Site-ID) entfernen
+    // z.B. /zsv-sstr54/foo → /foo
+    if (str_ends_with($host, '.clubdesk.com')) {
+        $path = preg_replace('#^/[^/]+#', '', $path) ?: '/';
+    }
+
+    $normalized = ($path ?: '/') . ($query ? '?' . $query : '');
+    return [$normalized, $host];
+}
+
 // --- Verarbeitung ---
 try {
     $pdo         = Database::get();
@@ -108,17 +127,19 @@ try {
         $width   = is_numeric($data['width'] ?? '') ? (int)$data['width'] : null;
         $lang    = sanitizeStr($data['lang'] ?? '', 32);
 
+        [$url, $urlHost] = normalizePageUrl($url);
         $country = getCountryCode();
         $isCms   = str_contains($url, 'app.clubdesk.com') ? 1 : 0;
 
         $stmt = $pdo->prepare(
-            'INSERT INTO pageviews (view_id, fingerprint, url, page_title, referrer, device_type, screen_width, lang, country, is_cms)
-             VALUES (:view_id, :fp, :url, :title, :ref, :device, :width, :lang, :country, :is_cms)'
+            'INSERT INTO pageviews (view_id, fingerprint, url, host, page_title, referrer, device_type, screen_width, lang, country, is_cms)
+             VALUES (:view_id, :fp, :url, :host, :title, :ref, :device, :width, :lang, :country, :is_cms)'
         );
         $stmt->execute([
             ':view_id'  => $viewId,
             ':fp'       => $fingerprint,
             ':url'      => $url,
+            ':host'     => $urlHost,
             ':title'    => $title,
             ':ref'      => $ref,
             ':device'   => $device,

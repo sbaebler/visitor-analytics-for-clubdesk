@@ -40,6 +40,7 @@ try {
             view_id     VARCHAR(36)  NOT NULL,
             fingerprint VARCHAR(64)  NOT NULL,
             url         VARCHAR(2048) NOT NULL,
+            host        VARCHAR(253) DEFAULT NULL,
             page_title  VARCHAR(512),
             referrer    VARCHAR(2048),
             device_type ENUM('desktop','mobile','tablet') NOT NULL DEFAULT 'desktop',
@@ -53,6 +54,7 @@ try {
             INDEX idx_fingerprint (fingerprint),
             INDEX idx_created_at (created_at),
             INDEX idx_url        (url(255)),
+            INDEX idx_host       (host),
             INDEX idx_country    (country),
             INDEX idx_is_cms     (is_cms)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
