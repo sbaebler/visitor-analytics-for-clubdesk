@@ -6,7 +6,11 @@
 (function () {
   'use strict';
 
-  var ENDPOINT = '/collect.php';
+  var script = document.currentScript ||
+    document.querySelector('script[src*="tracker.js"]');
+  var ENDPOINT = script
+    ? script.src.replace('tracker.js', 'collect.php')
+    : '/collect.php';
 
   // Clubdesk-Editor nicht tracken
   if (window.location.search.indexOf('edit=') !== -1) return;
