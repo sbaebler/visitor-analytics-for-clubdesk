@@ -107,6 +107,18 @@ function normalizePageUrl(string $url): array
         $path = preg_replace('#^/[^/]+#', '', $path) ?: '/';
     }
 
+    // /willkommen ist dieselbe Seite wie /
+    if ($path === '/willkommen' || $path === '/willkommen/') {
+        $path = '/';
+    }
+
+    // ?c= Parameter entfernen (Clubdesk Kontext-ID, nicht relevant für Analytics)
+    if ($query !== null) {
+        parse_str($query, $params);
+        unset($params['c']);
+        $query = $params ? http_build_query($params) : null;
+    }
+
     $normalized = ($path ?: '/') . ($query ? '?' . $query : '');
     return [$normalized, $host];
 }

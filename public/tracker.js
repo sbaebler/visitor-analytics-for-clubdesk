@@ -42,23 +42,84 @@
     }
   }
 
+  // Erkennt Beitragsseiten anhand des ?b= Parameters
+  function hasBeitragParam(url) {
+    return /[?&]b=\d+/.test(url);
+  }
+
+  // Beitragstitel aus DOM lesen (Clubdesk rendert Titel als <h1>)
+  function extractBeitragTitle() {
+    var selectors = ['h1', 'h2'];
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el && el.innerText.trim()) return el.innerText.trim();
+    }
+    return document.title;
+  }
+
   var viewId    = genId();
   var startTime = Date.now();
   var activeTime = 0;
   var lastActive = Date.now();
   var isHidden   = document.hidden;
 
-  // Pageview senden
-  send({
-    type   : 'pageview',
-    view_id: viewId,
-    url    : window.location.href.split('#')[0],
-    title  : document.title,
-    ref    : document.referrer,
-    device : getDevice(),
-    width  : screen.width,
-    lang   : navigator.language,
-  });
+  var initialUrl = window.location.href.split('#')[0];
+
+  // Pageview senden – bei Beitragsseiten verzögert, damit CMS Zeit zum Rendern hat
+  if (hasBeitragParam(initialUrl)) {
+    setTimeout(function () {
+      send({
+        type   : 'pageview',
+        view_id: viewId,
+        url    : window.location.href.split('#')[0],
+        title  : extractBeitragTitle(),
+        ref    : document.referrer,
+        device : getDevice(),
+        width  : screen.width,
+        lang   : navigator.language,
+      });
+    }, 1500);
+  } else {
+    send({
+      type   : 'pageview',
+      view_id: viewId,
+      url    : initialUrl,
+      title  : document.title,
+      ref    : document.referrer,
+      device : getDevice(),
+      width  : screen.width,
+      lang   : navigator.language,
+    });
+  }
+
+  // URL-Polling für Client-side Navigation (z.B. Beitrag ohne Page Reload öffnen)
+  var lastTrackedUrl = initialUrl;
+  setInterval(function () {
+    var currentUrl = window.location.href.split('#')[0];
+    if (currentUrl === lastTrackedUrl) return;
+    lastTrackedUrl = currentUrl;
+
+    if (hasBeitragParam(currentUrl)) {
+      var newViewId = genId();
+      viewId     = newViewId;
+      startTime  = Date.now();
+      activeTime = 0;
+      lastActive = Date.now();
+
+      setTimeout(function () {
+        send({
+          type   : 'pageview',
+          view_id: newViewId,
+          url    : currentUrl,
+          title  : extractBeitragTitle(),
+          ref    : lastTrackedUrl,
+          device : getDevice(),
+          width  : screen.width,
+          lang   : navigator.language,
+        });
+      }, 1000);
+    }
+  }, 500);
 
   // Sichtbarkeit tracken (Tab-Wechsel etc.)
   document.addEventListener('visibilitychange', function () {
