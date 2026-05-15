@@ -154,6 +154,17 @@ try {
         $country = getCountryCode();
         $isCms   = str_contains($url, 'app.clubdesk.com') ? 1 : 0;
 
+        // Rapid re-view deduplication: gleicher Fingerprint + URL innerhalb 10 Sekunden → überspringen
+        $dupCheck = $pdo->prepare(
+            'SELECT 1 FROM pageviews WHERE fingerprint = :fp AND url = :url
+             AND created_at >= NOW() - INTERVAL 10 SECOND LIMIT 1'
+        );
+        $dupCheck->execute([':fp' => $fingerprint, ':url' => $url]);
+        if ($dupCheck->fetch()) {
+            http_response_code(204);
+            exit;
+        }
+
         $stmt = $pdo->prepare(
             'INSERT INTO pageviews (view_id, fingerprint, url, host, page_title, referrer, device_type, screen_width, lang, country, is_cms, newsletter_batch)
              VALUES (:view_id, :fp, :url, :host, :title, :ref, :device, :width, :lang, :country, :is_cms, :newsletter_batch)'
