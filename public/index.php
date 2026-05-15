@@ -75,7 +75,8 @@ function qVal(PDO $pdo, string $sql, array $params = []): mixed
 $p = [':s' => $startStr, ':e' => $endStr];
 
 // Graceful Degradation: Filter nur anwenden wenn Spalte existiert
-$hasCmsCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'is_cms'")->fetch();
+$hasCmsCol        = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'is_cms'")->fetch();
+$hasNewsletterCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'newsletter_batch'")->fetch();
 $cmsCondition = $hasCmsCol ? ' AND is_cms = :cms' : '';
 if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
 
@@ -124,6 +125,15 @@ $outboundLinks = $view === 'cms' ? [] : q($pdo,
     "SELECT event_value, COUNT(*) as clicks FROM events
      WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'
      GROUP BY event_value ORDER BY clicks DESC LIMIT 10", [':s' => $startStr, ':e' => $endStr]);
+
+// Newsletter-Batches
+$newsletterBatches = [];
+if ($hasNewsletterCol) {
+    $newsletterBatches = q($pdo,
+        "SELECT newsletter_batch, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
+         FROM pageviews WHERE created_at BETWEEN :s AND :e AND newsletter_batch IS NOT NULL{$cmsCondition}
+         GROUP BY newsletter_batch ORDER BY views DESC LIMIT 10", $p);
+}
 
 // CMS-Zähler für Info-Banner (nur im Besucher-View)
 $cmsCount = 0;
@@ -436,6 +446,29 @@ $deviceData   = array_column($devices, 'cnt');
                 </table>
             </div>
         </div>
+
+        <?php if ($hasNewsletterCol && !empty($newsletterBatches)): ?>
+        <!-- Newsletter-Batches -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Newsletter-Herkunft</h2>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Batch-ID</th><th>Aufrufe</th><th>Besucher</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($newsletterBatches as $row): ?>
+                        <tr>
+                            <td class="url-path"><?= htmlspecialchars($row['newsletter_batch']) ?></td>
+                            <td class="num"><?= number_format((int)$row['views'], 0, '.', "'") ?></td>
+                            <td class="num"><?= number_format((int)$row['visitors'], 0, '.', "'") ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
 
         <!-- Zwei Spalten -->
         <div class="two-col">

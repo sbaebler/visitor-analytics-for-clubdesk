@@ -112,10 +112,10 @@ function normalizePageUrl(string $url): array
         $path = '/';
     }
 
-    // ?c= Parameter entfernen (Clubdesk Kontext-ID, nicht relevant für Analytics)
+    // Tracking-Parameter entfernen: ?c= (Clubdesk Kontext), ?b= + ?s= (Newsletter), ?rfb= (Formular-Referenz)
     if ($query !== null) {
         parse_str($query, $params);
-        unset($params['c']);
+        unset($params['c'], $params['b'], $params['s'], $params['rfb']);
         $query = $params ? http_build_query($params) : null;
     }
 
@@ -139,26 +139,38 @@ try {
         $width   = is_numeric($data['width'] ?? '') ? (int)$data['width'] : null;
         $lang    = sanitizeStr($data['lang'] ?? '', 32);
 
+        // Newsletter-Batch-ID (?b=) vor Normalisierung extrahieren
+        $newsletterBatch = null;
+        $rawQuery = parse_url($url, PHP_URL_QUERY);
+        if ($rawQuery !== null) {
+            parse_str($rawQuery, $rawParams);
+            $bVal = $rawParams['b'] ?? null;
+            if ($bVal !== null && preg_match('/^\d{1,16}$/', (string)$bVal)) {
+                $newsletterBatch = (string)$bVal;
+            }
+        }
+
         [$url, $urlHost] = normalizePageUrl($url);
         $country = getCountryCode();
         $isCms   = str_contains($url, 'app.clubdesk.com') ? 1 : 0;
 
         $stmt = $pdo->prepare(
-            'INSERT INTO pageviews (view_id, fingerprint, url, host, page_title, referrer, device_type, screen_width, lang, country, is_cms)
-             VALUES (:view_id, :fp, :url, :host, :title, :ref, :device, :width, :lang, :country, :is_cms)'
+            'INSERT INTO pageviews (view_id, fingerprint, url, host, page_title, referrer, device_type, screen_width, lang, country, is_cms, newsletter_batch)
+             VALUES (:view_id, :fp, :url, :host, :title, :ref, :device, :width, :lang, :country, :is_cms, :newsletter_batch)'
         );
         $stmt->execute([
-            ':view_id'  => $viewId,
-            ':fp'       => $fingerprint,
-            ':url'      => $url,
-            ':host'     => $urlHost,
-            ':title'    => $title,
-            ':ref'      => $ref,
-            ':device'   => $device,
-            ':width'    => $width,
-            ':lang'     => $lang,
-            ':country'  => $country,
-            ':is_cms'   => $isCms,
+            ':view_id'           => $viewId,
+            ':fp'                => $fingerprint,
+            ':url'               => $url,
+            ':host'              => $urlHost,
+            ':title'             => $title,
+            ':ref'               => $ref,
+            ':device'            => $device,
+            ':width'             => $width,
+            ':lang'              => $lang,
+            ':country'           => $country,
+            ':is_cms'            => $isCms,
+            ':newsletter_batch'  => $newsletterBatch,
         ]);
 
     } elseif ($type === 'duration') {
