@@ -20,6 +20,21 @@ $view = $_GET['view'] ?? 'real';
 if (!in_array($view, ['real', 'cms'], true)) $view = 'real';
 $isCmsFilter = ($view === 'cms') ? 1 : 0;
 
+// --- Seiten-Filter ---
+$pageFilter = [];
+if (!empty($_GET['page'])) {
+    $raw = is_array($_GET['page']) ? $_GET['page'] : [$_GET['page']];
+    $pageFilter = array_values(array_unique(array_filter(array_map('trim', $raw), fn($u) => $u !== '' && strlen($u) <= 2048)));
+}
+
+$dashUrl = function(array $pages, ?string $rangeOverride = null, ?string $viewOverride = null) use ($range, $view): string {
+    $qs = http_build_query(['range' => $rangeOverride ?? $range, 'view' => $viewOverride ?? $view]);
+    foreach ($pages as $u) {
+        $qs .= '&page%5B%5D=' . rawurlencode($u);
+    }
+    return '/?' . $qs;
+};
+
 $tz = new DateTimeZone('Europe/Zurich');
 $now = new DateTimeImmutable('now', $tz);
 
@@ -80,22 +95,39 @@ $hasNewsletterCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'newsle
 $cmsCondition = $hasCmsCol ? ' AND is_cms = :cms' : '';
 if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
 
-$totalPageviews   = (int) qVal($pdo, "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}", $p);
-$uniqueVisitors   = (int) qVal($pdo, "SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}", $p);
-$avgDuration      = (float) qVal($pdo, "SELECT AVG(duration) FROM pageviews WHERE created_at BETWEEN :s AND :e AND duration > 0 AND duration < 3600{$cmsCondition}", $p);
+$pageCondition = '';
+$pageParams    = [];
+if (!empty($pageFilter)) {
+    $phs = implode(',', array_map(fn($i) => ':pg' . $i, array_keys($pageFilter)));
+    $pageCondition = " AND url IN ({$phs})";
+    foreach ($pageFilter as $i => $u) {
+        $pageParams[':pg' . $i] = $u;
+    }
+    $p = array_merge($p, $pageParams);
+}
+
+$totalPageviews   = (int) qVal($pdo, "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$pageCondition}", $p);
+$uniqueVisitors   = (int) qVal($pdo, "SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$pageCondition}", $p);
+$avgDuration      = (float) qVal($pdo, "SELECT AVG(duration) FROM pageviews WHERE created_at BETWEEN :s AND :e AND duration > 0 AND duration < 3600{$cmsCondition}{$pageCondition}", $p);
 $outboundClicks   = $view === 'cms' ? 0 : (int) qVal($pdo, "SELECT COUNT(*) FROM events WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'", [':s' => $startStr, ':e' => $endStr]);
 
 // Tägliche Übersicht für Chart
 $dailyRows = q($pdo,
     "SELECT DATE(created_at) as d, COUNT(*) as pv, COUNT(DISTINCT fingerprint) as uv
-     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$pageCondition}
      GROUP BY DATE(created_at) ORDER BY d ASC", $p);
 
 // Top-Seiten (Pfad ohne Domain anzeigen)
 $topPages = q($pdo,
     "SELECT url, page_title, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$pageCondition}
      GROUP BY url, page_title ORDER BY views DESC LIMIT 15", $p);
+
+// Alle Seiten für Vorschlagsliste (ohne Seiten-Filter, damit neue URLs vorgeschlagen werden)
+$pNoPage = array_diff_key($p, $pageParams);
+$allPageUrls = !empty($pageFilter) ? q($pdo,
+    "SELECT DISTINCT url FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     ORDER BY url LIMIT 200", $pNoPage) : [];
 
 // Top-Referrer (nur externe)
 $selfFilter = $selfDomain !== '' ? 'AND referrer NOT LIKE :self' : '';
@@ -104,20 +136,20 @@ $topRefs = q($pdo,
     "SELECT referrer, COUNT(*) as cnt FROM pageviews
      WHERE created_at BETWEEN :s AND :e
      AND referrer != '' AND referrer IS NOT NULL
-     {$selfFilter}{$cmsCondition}
+     {$selfFilter}{$cmsCondition}{$pageCondition}
      GROUP BY referrer ORDER BY cnt DESC LIMIT 10",
     $p + $selfParams);
 
 // Geräte
 $devices = q($pdo,
     "SELECT device_type, COUNT(*) as cnt FROM pageviews
-     WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$pageCondition}
      GROUP BY device_type ORDER BY cnt DESC", $p);
 
 // Top Länder
 $topCountries = q($pdo,
     "SELECT country, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-     FROM pageviews WHERE created_at BETWEEN :s AND :e AND country IS NOT NULL{$cmsCondition}
+     FROM pageviews WHERE created_at BETWEEN :s AND :e AND country IS NOT NULL{$cmsCondition}{$pageCondition}
      GROUP BY country ORDER BY visitors DESC LIMIT 10", $p);
 
 // Externe Links (nur im Besucher-View)
@@ -131,7 +163,7 @@ $newsletterBatches = [];
 if ($hasNewsletterCol) {
     $newsletterBatches = q($pdo,
         "SELECT newsletter_batch, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-         FROM pageviews WHERE created_at BETWEEN :s AND :e AND newsletter_batch IS NOT NULL{$cmsCondition}
+         FROM pageviews WHERE created_at BETWEEN :s AND :e AND newsletter_batch IS NOT NULL{$cmsCondition}{$pageCondition}
          GROUP BY newsletter_batch ORDER BY views DESC LIMIT 10", $p);
 }
 
@@ -139,8 +171,8 @@ if ($hasNewsletterCol) {
 $cmsCount = 0;
 if ($hasCmsCol && $view === 'real') {
     $cmsCount = (int) qVal($pdo,
-        'SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e AND is_cms = 1',
-        [':s' => $startStr, ':e' => $endStr]
+        "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e AND is_cms = 1{$pageCondition}",
+        [':s' => $startStr, ':e' => $endStr] + $pageParams
     );
 }
 
@@ -319,19 +351,52 @@ $deviceData   = array_column($devices, 'cnt');
         </div>
         <nav class="range-nav">
             <?php foreach (['today' => 'Heute', '7d' => '7 Tage', '30d' => '30 Tage', 'month' => 'Monat', 'lastmonth' => 'Vormonat'] as $key => $lbl): ?>
-                <a href="/?range=<?= $key ?>&view=<?= $view ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
+                <a href="<?= htmlspecialchars($dashUrl($pageFilter, $key)) ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
                     <?= $lbl ?>
                 </a>
             <?php endforeach; ?>
         </nav>
         <nav class="view-nav">
-            <a href="/?range=<?= $range ?>&view=real" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
-            <a href="/?range=<?= $range ?>&view=cms"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
+            <a href="<?= htmlspecialchars($dashUrl($pageFilter, null, 'real')) ?>" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
+            <a href="<?= htmlspecialchars($dashUrl($pageFilter, null, 'cms')) ?>"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>
 
     <main class="content">
+
+        <div class="page-filter-bar">
+            <span class="filter-label">Seite</span>
+            <?php if (!empty($pageFilter)): ?>
+            <div class="filter-chips">
+                <?php foreach ($pageFilter as $u): ?>
+                    <?php $withoutThis = array_values(array_filter($pageFilter, fn($f) => $f !== $u)); ?>
+                    <a href="<?= htmlspecialchars($dashUrl($withoutThis)) ?>" class="filter-chip" title="Filter entfernen">
+                        <span><?= htmlspecialchars(shortUrl($u)) ?></span>
+                        <span class="filter-chip-remove">×</span>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+            <form method="get" action="/" class="filter-form">
+                <input type="hidden" name="range" value="<?= htmlspecialchars($range) ?>">
+                <input type="hidden" name="view"  value="<?= htmlspecialchars($view) ?>">
+                <?php foreach ($pageFilter as $u): ?>
+                <input type="hidden" name="page[]" value="<?= htmlspecialchars($u) ?>">
+                <?php endforeach; ?>
+                <input type="text" name="page[]" placeholder="URL eingeben …" class="filter-input" autocomplete="off" list="page-suggestions">
+                <datalist id="page-suggestions">
+                    <?php $suggestions = !empty($pageFilter) ? $allPageUrls : $topPages; ?>
+                    <?php foreach ($suggestions as $pg): ?>
+                    <option value="<?= htmlspecialchars($pg['url']) ?>">
+                    <?php endforeach; ?>
+                </datalist>
+                <button type="submit" class="filter-add-btn">Filtern</button>
+            </form>
+            <?php if (!empty($pageFilter)): ?>
+            <a href="<?= htmlspecialchars($dashUrl([])) ?>" class="filter-clear">Alle entfernen</a>
+            <?php endif; ?>
+        </div>
 
         <!-- KPI-Karten -->
         <div class="kpi-grid">
@@ -360,7 +425,7 @@ $deviceData   = array_column($devices, 'cnt');
         <?php if ($cmsCount > 0): ?>
         <div class="cms-hint">
             <?= number_format($cmsCount, 0, '.', "'") ?> <span class="hint" title="Seitenaufrufe durch Redakteure im Clubdesk-Editor – in der Besucher-Ansicht ausgeblendet">CMS-Aufrufe</span> im gleichen Zeitraum –
-            <a href="/?range=<?= $range ?>&view=cms">anzeigen &rarr;</a>
+            <a href="<?= htmlspecialchars($dashUrl($pageFilter, null, 'cms')) ?>">anzeigen &rarr;</a>
         </div>
         <?php endif; ?>
 
@@ -395,19 +460,23 @@ $deviceData   = array_column($devices, 'cnt');
                                     $title = $row['page_title'] ?? '';
                                     $title = preg_replace('/\s*[-–|]\s*Zurich Sailing.*$/i', '', $title);
                                     $title = trim($title);
+                                    $isFiltered = in_array($row['url'], $pageFilter, true);
+                                    $newFilter  = $isFiltered
+                                        ? array_values(array_filter($pageFilter, fn($f) => $f !== $row['url']))
+                                        : array_merge($pageFilter, [$row['url']]);
                                 ?>
-                                <tr>
+                                <tr class="<?= $isFiltered ? 'page-active' : '' ?>">
                                     <td>
-                                        <?php if ($title !== ''): ?>
-                                            <span class="url-path" title="<?= htmlspecialchars($row['url']) ?>">
-                                                <?= htmlspecialchars($title) ?>
-                                            </span>
-                                            <span class="url-title"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
-                                        <?php else: ?>
-                                            <span class="url-path" title="<?= htmlspecialchars($row['url']) ?>">
-                                                <?= htmlspecialchars(shortUrl($row['url'])) ?>
-                                            </span>
-                                        <?php endif; ?>
+                                        <a href="<?= htmlspecialchars($dashUrl($newFilter)) ?>"
+                                           class="page-filter-toggle <?= $isFiltered ? 'is-active' : '' ?>"
+                                           title="<?= $isFiltered ? 'Filter entfernen' : 'Nach dieser Seite filtern' ?>">
+                                            <?php if ($title !== ''): ?>
+                                                <span class="url-path"><?= htmlspecialchars($title) ?></span>
+                                                <span class="url-title"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
+                                            <?php else: ?>
+                                                <span class="url-path"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
+                                            <?php endif; ?>
+                                        </a>
                                     </td>
                                     <td class="num"><?= number_format((int)$row['views'], 0, '.', "'") ?></td>
                                     <td class="num"><?= number_format((int)$row['visitors'], 0, '.', "'") ?></td>
