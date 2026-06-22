@@ -36,9 +36,9 @@ $apiUrl     = $baseUrl . '/social.php';
 $encodedUrl = urlencode($pageUrl);
 
 $labels = [
-    'de' => ['views' => 'Aufrufe',  'like' => 'Gefällt mir', 'share' => 'Teilen',   'copied' => 'Link kopiert!',   'unlike' => 'Gefällt mir nicht mehr'],
-    'fr' => ['views' => 'Vues',     'like' => 'J\'aime',     'share' => 'Partager', 'copied' => 'Lien copié!',     'unlike' => 'Je n\'aime plus'],
-    'en' => ['views' => 'Views',    'like' => 'Like',        'share' => 'Share',    'copied' => 'Link copied!',    'unlike' => 'Unlike'],
+    'de' => ['views' => 'Aufrufe',  'like' => 'Gefällt mir', 'share' => 'Teilen',   'unlike' => 'Gefällt mir nicht mehr'],
+    'fr' => ['views' => 'Vues',     'like' => 'J\'aime',     'share' => 'Partager', 'unlike' => 'Je n\'aime plus'],
+    'en' => ['views' => 'Views',    'like' => 'Like',        'share' => 'Share',    'unlike' => 'Unlike'],
 ];
 $l = $labels[$lang];
 ?>
@@ -220,15 +220,11 @@ const I = {
 
     share: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
 
-    whatsapp: `<svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.998 2c-5.514 0-9.998 4.481-9.998 9.998 0 1.76.46 3.41 1.268 4.845L2 22l5.255-1.378A9.954 9.954 0 0 0 12 21.997C17.514 21.997 22 17.516 22 12S17.512 2 11.998 2z"/></svg>`,
+    whatsapp: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path fill="#25D366" d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24z"/><path fill="#fff" d="M17.507 14.307l-.009.075c-.301-.15-1.767-.867-2.04-.966-.272-.099-.47-.148-.669.15-.197.297-.767.966-.94 1.165-.173.198-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.148-.669-1.612-.916-2.207-.241-.579-.486-.5-.669-.51-.172-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>`,
 
     facebook: `<svg width="16" height="16" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`,
 
-    linkedin: `<svg width="16" height="16" viewBox="0 0 24 24" fill="#0A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>`,
-
     mail: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a5568" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
-
-    copy: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a5568" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -266,15 +262,9 @@ function render(viewsFmt, likesFmt, liked) {
                 <a class="share-item" href="https://www.facebook.com/sharer/sharer.php?u=${enc}" target="_blank" rel="noopener noreferrer">
                     <span class="share-icon">${I.facebook}</span>Facebook
                 </a>
-                <a class="share-item" href="https://www.linkedin.com/shareArticle?mini=true&url=${enc}" target="_blank" rel="noopener noreferrer">
-                    <span class="share-icon">${I.linkedin}</span>LinkedIn
-                </a>
                 <a class="share-item" href="mailto:?body=${enc}" target="_blank">
                     <span class="share-icon">${I.mail}</span>E-Mail
                 </a>
-                <button class="share-item" onclick="copyLink()">
-                    <span class="share-icon">${I.copy}</span>Link kopieren
-                </button>
             </div>
         </div>
     `;
@@ -371,17 +361,6 @@ function closeShareMenu() {
     }
 }
 
-// ── Link kopieren ─────────────────────────────────────────────────────────────
-async function copyLink() {
-    closeShareMenu();
-    try {
-        await navigator.clipboard.writeText(PAGE_URL);
-        toast('✓ ' + L.copied);
-    } catch {
-        toast(PAGE_URL); // Fallback: URL als Toast zeigen
-    }
-}
-
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function toast(msg) {
     const el = document.getElementById('toast');
@@ -393,7 +372,6 @@ function toast(msg) {
 // ── Globale Funktionen (onclick-Attribute) ────────────────────────────────────
 window.handleLike   = handleLike;
 window.toggleShare  = toggleShare;
-window.copyLink     = copyLink;
 
 // ── Schliessen auf Klick ausserhalb des iframes (vom Parent gemeldet) ─────────
 // Klicks auf die Parent-Seite erreichen den iframe-Dokument-Click-Listener
