@@ -268,13 +268,13 @@ function render(viewsFmt, likesFmt, liked) {
                 <a class="share-item" href="https://wa.me/?text=${enc}" target="_blank" rel="noopener noreferrer">
                     <span class="share-icon">${I.whatsapp}</span>WhatsApp
                 </a>
-                <a class="share-item" href="${smsHref}">
+                <a class="share-item" href="${smsHref}" target="_top">
                     <span class="share-icon">${I.imessage}</span>iMessage
                 </a>
                 <a class="share-item" href="https://www.facebook.com/sharer/sharer.php?u=${enc}" target="_blank" rel="noopener noreferrer">
                     <span class="share-icon">${I.facebook}</span>Facebook
                 </a>
-                <a class="share-item" href="mailto:?body=${enc}" target="_blank">
+                <a class="share-item" href="mailto:?body=${enc}" target="_top">
                     <span class="share-icon">${I.mail}</span>E-Mail
                 </a>
             </div>
