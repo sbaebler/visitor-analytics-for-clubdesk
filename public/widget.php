@@ -131,7 +131,7 @@ body {
 .share-menu {
     display: none;
     position: absolute;
-    bottom: calc(100% + 8px);
+    top: calc(100% + 8px);
     left: 0;
     background: #fff;
     border: 1px solid var(--border);
@@ -283,7 +283,7 @@ function render(viewsFmt, likesFmt, liked) {
     document.addEventListener('click', (e) => {
         const btn = document.getElementById('btn-share');
         if (btn && !btn.contains(e.target)) {
-            document.getElementById('share-menu')?.classList.remove('open');
+            closeShareMenu();
         }
     }, { once: false });
 }
@@ -340,12 +340,40 @@ async function handleLike() {
 // ── Share-Menü ───────────────────────────────────────────────────────────────
 function toggleShare(e) {
     e.stopPropagation();
-    document.getElementById('share-menu')?.classList.toggle('open');
+    const menu = document.getElementById('share-menu');
+    if (!menu) return;
+    if (menu.classList.contains('open')) {
+        closeShareMenu();
+    } else {
+        menu.classList.add('open');
+        notifyParentHeight(true);
+    }
+}
+
+// ── Iframe-Höhe an Parent melden (Share-Menü braucht mehr Platz als die fixe 60px) ─
+function notifyParentHeight(expanded) {
+    const widget = document.getElementById('widget');
+    if (!widget) return;
+    let height = widget.offsetHeight;
+    if (expanded) {
+        const menu = document.getElementById('share-menu');
+        if (menu) height += menu.offsetHeight + 8; // 8px = Lücke aus `top: calc(100% + 8px)`
+    }
+    window.parent.postMessage({ source: 'zs-widget', height }, '*');
+}
+
+// ── Share-Menü schliessen (zentral, damit Resize-Rückmeldung nie ausgelassen wird) ──
+function closeShareMenu() {
+    const menu = document.getElementById('share-menu');
+    if (menu && menu.classList.contains('open')) {
+        menu.classList.remove('open');
+        notifyParentHeight(false);
+    }
 }
 
 // ── Link kopieren ─────────────────────────────────────────────────────────────
 async function copyLink() {
-    document.getElementById('share-menu')?.classList.remove('open');
+    closeShareMenu();
     try {
         await navigator.clipboard.writeText(PAGE_URL);
         toast('✓ ' + L.copied);
@@ -366,6 +394,16 @@ function toast(msg) {
 window.handleLike   = handleLike;
 window.toggleShare  = toggleShare;
 window.copyLink     = copyLink;
+
+// ── Schliessen auf Klick ausserhalb des iframes (vom Parent gemeldet) ─────────
+// Klicks auf die Parent-Seite erreichen den iframe-Dokument-Click-Listener
+// nicht (separates Dokument) – der Parent meldet daher Klicks aktiv zurück.
+window.addEventListener('message', (e) => {
+    if (e.source !== window.parent) return;
+    if (e.data && e.data.source === 'zs-widget-host' && e.data.action === 'close') {
+        closeShareMenu();
+    }
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadStats();
