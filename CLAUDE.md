@@ -101,6 +101,10 @@ Push auf `main` → GitHub Actions deployt via FTPS auf Cyon.
 ## Häufige Aufgaben
 
 **Neue Share-Plattform:** `public/widget.php` → SVG-Icon in `I`-Objekt, neues `<a>` im `share-menu`-Template.
+Aktuell aktiv: WhatsApp, iMessage, Facebook, E-Mail.
+Ausnahme iMessage: kein statischer Web-Link, sondern `sms:`-Schema mit plattformabhängigem Trennzeichen
+(iOS `sms:&body=`, macOS/andere `sms:?body=`). Der `href` wird daher in `render()` als `smsHref` berechnet,
+nicht statisch im Template gesetzt.
 
 **Neue Sprache:** `$labels`-Array in `widget.php` und `L`-Objekt in JS erweitern.
 
