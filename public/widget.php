@@ -237,6 +237,13 @@ function render(viewsFmt, likesFmt, liked) {
     userLiked = liked;
     const enc = encodeURIComponent(PAGE_URL);
 
+    // iOS verlangt beim sms:-Schema das Trennzeichen `&` (sms:&body=…),
+    // macOS und andere Plattformen erwarten `?` (sms:?body=…).
+    // iPadOS meldet sich als "MacIntel" mit Touch – daher zusätzlich maxTouchPoints prüfen.
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+               || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const smsHref = `sms:${isIOS ? '&' : '?'}body=${enc}`;
+
     document.getElementById('widget').innerHTML = `
         <span class="stat">
             ${I.eye}
@@ -261,7 +268,7 @@ function render(viewsFmt, likesFmt, liked) {
                 <a class="share-item" href="https://wa.me/?text=${enc}" target="_blank" rel="noopener noreferrer">
                     <span class="share-icon">${I.whatsapp}</span>WhatsApp
                 </a>
-                <a class="share-item" href="sms:?&body=${enc}">
+                <a class="share-item" href="${smsHref}">
                     <span class="share-icon">${I.imessage}</span>iMessage
                 </a>
                 <a class="share-item" href="https://www.facebook.com/sharer/sharer.php?u=${enc}" target="_blank" rel="noopener noreferrer">
