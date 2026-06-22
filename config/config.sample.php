@@ -34,4 +34,11 @@ return [
         ['name' => 'clubdesk',   'url' => 'https://app.clubdesk.com', 'reference' => false],
         ['name' => 'reference',  'url' => 'https://google.com',        'reference' => true],
     ],
+
+    // Social Widget
+    'social' => [
+        // Basis-URL des Analytics-Servers (ohne trailing slash)
+        'base_url' => 'https://stats.YOUR-DOMAIN.COM',
+    ],
 ];
+
