@@ -8,6 +8,13 @@
     # CSP wird pro Seite per PHP gesetzt (verschiedene Anforderungen)
 </IfModule>
 
+# widget.php darf in iframes eingebettet werden (Social Widget für Clubdesk)
+<Files "widget.php">
+    <IfModule mod_headers.c>
+        Header always set X-Frame-Options "ALLOWALL"
+    </IfModule>
+</Files>
+
 # PHP-Dateien im setup/-Ordner blockieren (aus Document Root erreichbar via /setup/)
 <Files "install.php">
     Order allow,deny
