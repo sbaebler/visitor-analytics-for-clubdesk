@@ -71,9 +71,28 @@ Push auf `main` → GitHub Actions deployt via FTPS auf Cyon.
 <iframe id="sw" src="" width="100%" height="60"
         frameborder="0" scrolling="no" style="border:none;overflow:hidden;"></iframe>
 <script>
-  document.getElementById('sw').src =
-    'https://stats.zurich-sailing.ch/widget.php?url=' +
+  var sw = document.getElementById('sw');
+  sw.src = 'https://stats.zurich-sailing.ch/widget.php?url=' +
     encodeURIComponent(window.location.href) + '&lang=de';
+
+  // Widget meldet per postMessage, wenn das Teilen-Menü mehr/weniger Höhe braucht,
+  // als die fixe 60px erlauben. e.source statt fester ID, damit das auch bei
+  // mehreren Widgets auf einer Seite pro Instanz korrekt funktioniert.
+  window.addEventListener('message', function (e) {
+    if (e.origin !== 'https://stats.zurich-sailing.ch') return;
+    if (!e.data || e.data.source !== 'zs-widget') return;
+    if (e.source !== sw.contentWindow) return;
+    var h = Math.max(40, Math.min(400, Number(e.data.height) || 60));
+    sw.style.height = h + 'px';
+  });
+
+  // Klick irgendwo auf der Seite ausserhalb des iframes → Widget meldet das
+  // dem iframe, damit das Teilen-Menü dort geschlossen wird (Klicks auf der
+  // Parent-Seite erreichen den iframe-eigenen Click-Listener sonst nicht,
+  // da iframe und Parent getrennte Dokumente sind).
+  document.addEventListener('click', function () {
+    sw.contentWindow.postMessage({ source: 'zs-widget-host', action: 'close' }, 'https://stats.zurich-sailing.ch');
+  });
 </script>
 ```
 
