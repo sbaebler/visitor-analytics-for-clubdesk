@@ -83,20 +83,20 @@ $hasNewsletterCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'newsle
 $cmsCondition = $hasCmsCol ? ' AND is_cms = :cms' : '';
 if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
 
-// Param-Set für die Dropdown-Auswahlliste (Zeitraum + cms, OHNE Seitenfilter)
-$pForOptions = $p;
-
-// Seitenfilter (gebundener Parameter → keine Injection-Gefahr)
-$urlCondition = $urlFilter !== '' ? ' AND url = :url' : '';
+// Seitenfilter: $urlFilter ist ein Pfad (z. B. /segelsport/breitensport/zlc).
+// pageviews.url ist bereits pfad-normalisiert → Query-String abschneiden und vergleichen.
+// (gebundener Parameter → keine Injection-Gefahr)
+$urlCondition = $urlFilter !== '' ? " AND SUBSTRING_INDEX(url, '?', 1) = :url" : '';
 if ($urlFilter !== '') $p[':url'] = $urlFilter;
-// Eigene Param-Sets für die events-Queries (mit/ohne Seitenfilter)
+// events.url wird roh gespeichert (mit Domain + Query) → erst Domain & Query entfernen.
+$eventUrlCondition = $urlFilter !== '' ? " AND SUBSTRING_INDEX(REGEXP_REPLACE(url, '^https?://[^/]+', ''), '?', 1) = :url" : '';
 $eventParams = [':s' => $startStr, ':e' => $endStr];
 if ($urlFilter !== '') $eventParams[':url'] = $urlFilter;
 
 $totalPageviews   = (int) qVal($pdo, "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}", $p);
 $uniqueVisitors   = (int) qVal($pdo, "SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}", $p);
 $avgDuration      = (float) qVal($pdo, "SELECT AVG(duration) FROM pageviews WHERE created_at BETWEEN :s AND :e AND duration > 0 AND duration < 3600{$cmsCondition}{$urlCondition}", $p);
-$outboundClicks   = $view === 'cms' ? 0 : (int) qVal($pdo, "SELECT COUNT(*) FROM events WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'{$urlCondition}", $eventParams);
+$outboundClicks   = $view === 'cms' ? 0 : (int) qVal($pdo, "SELECT COUNT(*) FROM events WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'{$eventUrlCondition}", $eventParams);
 
 // Tägliche Übersicht für Chart
 $dailyRows = q($pdo,
@@ -104,11 +104,12 @@ $dailyRows = q($pdo,
      FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
      GROUP BY DATE(created_at) ORDER BY d ASC", $p);
 
-// Top-Seiten (Pfad ohne Domain anzeigen)
+// Top-Seiten (nach Pfad gruppiert – Query-String-Varianten zusammenfassen)
 $topPages = q($pdo,
-    "SELECT url, page_title, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
+    "SELECT SUBSTRING_INDEX(url, '?', 1) AS url, MAX(page_title) AS page_title,
+            COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
      FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
-     GROUP BY url, page_title ORDER BY views DESC LIMIT 15", $p);
+     GROUP BY SUBSTRING_INDEX(url, '?', 1) ORDER BY views DESC LIMIT 15", $p);
 
 // Top-Referrer (nur externe)
 $selfFilter = $selfDomain !== '' ? 'AND referrer NOT LIKE :self' : '';
@@ -136,7 +137,7 @@ $topCountries = q($pdo,
 // Externe Links (nur im Besucher-View)
 $outboundLinks = $view === 'cms' ? [] : q($pdo,
     "SELECT event_value, COUNT(*) as clicks FROM events
-     WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'{$urlCondition}
+     WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'{$eventUrlCondition}
      GROUP BY event_value ORDER BY clicks DESC LIMIT 10", $eventParams);
 
 // Newsletter-Batches
@@ -148,11 +149,16 @@ if ($hasNewsletterCol) {
          GROUP BY newsletter_batch ORDER BY views DESC LIMIT 10", $p);
 }
 
-// Auswahlliste für den Seitenfilter (Zeitraum + cms, ohne Seitenfilter)
-$pageOptions = q($pdo,
-    "SELECT url, MAX(page_title) AS page_title, COUNT(*) AS views
-     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
-     GROUP BY url ORDER BY views DESC", $pForOptions);
+// Repräsentativer Titel der gefilterten Seite (für das Filter-Banner)
+$filterTitle = '';
+if ($urlFilter !== '') {
+    $filterTitle = cleanTitle((string) qVal($pdo,
+        "SELECT page_title FROM pageviews
+         WHERE SUBSTRING_INDEX(url, '?', 1) = :url AND page_title <> ''
+         ORDER BY created_at DESC LIMIT 1",
+        [':url' => $urlFilter]
+    ));
+}
 
 // CMS-Zähler für Info-Banner (nur im Besucher-View)
 $cmsCount = 0;
@@ -361,28 +367,17 @@ $deviceData   = array_column($devices, 'cnt');
 
     <main class="content">
 
-        <!-- Seitenfilter -->
-        <form class="filter-bar" method="get" action="/">
-            <input type="hidden" name="range" value="<?= htmlspecialchars($range) ?>">
-            <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
-            <label class="filter-label" for="urlFilter">Seite</label>
-            <select id="urlFilter" name="url" class="filter-select" onchange="this.form.submit()">
-                <option value="">Alle Seiten</option>
-                <?php foreach ($pageOptions as $opt): ?>
-                    <?php
-                        $optTitle = cleanTitle($opt['page_title']);
-                        $optPath  = shortUrl($opt['url']);
-                        $optLabel = $optTitle !== '' ? "{$optTitle} — {$optPath}" : $optPath;
-                    ?>
-                    <option value="<?= htmlspecialchars($opt['url']) ?>" <?= $opt['url'] === $urlFilter ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($optLabel) ?> (<?= number_format((int)$opt['views'], 0, '.', "'") ?>)
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <?php if ($urlFilter !== ''): ?>
-                <a class="filter-reset" href="/?range=<?= $range ?>&view=<?= $view ?>">&times; Filter zurücksetzen</a>
+        <?php if ($urlFilter !== ''): ?>
+        <!-- Aktiver Seitenfilter -->
+        <div class="filter-active">
+            <span class="filter-active-label">Gefiltert auf Seite:</span>
+            <?php if ($filterTitle !== ''): ?>
+                <strong><?= htmlspecialchars($filterTitle) ?></strong>
             <?php endif; ?>
-        </form>
+            <span class="filter-active-path"><?= htmlspecialchars(shortUrl($urlFilter)) ?></span>
+            <a class="filter-active-reset" href="/?range=<?= $range ?>&view=<?= $view ?>">&times; Filter entfernen</a>
+        </div>
+        <?php endif; ?>
 
         <!-- KPI-Karten -->
         <div class="kpi-grid">
@@ -441,19 +436,20 @@ $deviceData   = array_column($devices, 'cnt');
                             <tr><td colspan="3" class="empty">Noch keine Daten</td></tr>
                         <?php else: ?>
                             <?php foreach ($topPages as $row): ?>
-                                <?php $title = cleanTitle($row['page_title']); ?>
+                                <?php
+                                    $title = cleanTitle($row['page_title']);
+                                    $pageHref = '/?range=' . $range . '&view=' . $view . '&url=' . urlencode($row['url']);
+                                ?>
                                 <tr>
                                     <td>
+                                        <a class="page-link" href="<?= htmlspecialchars($pageHref) ?>" title="Auf diese Seite filtern – <?= htmlspecialchars($row['url']) ?>">
                                         <?php if ($title !== ''): ?>
-                                            <span class="url-path" title="<?= htmlspecialchars($row['url']) ?>">
-                                                <?= htmlspecialchars($title) ?>
-                                            </span>
+                                            <span class="url-path"><?= htmlspecialchars($title) ?></span>
                                             <span class="url-title"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
                                         <?php else: ?>
-                                            <span class="url-path" title="<?= htmlspecialchars($row['url']) ?>">
-                                                <?= htmlspecialchars(shortUrl($row['url'])) ?>
-                                            </span>
+                                            <span class="url-path"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
                                         <?php endif; ?>
+                                        </a>
                                     </td>
                                     <td class="num"><?= number_format((int)$row['views'], 0, '.', "'") ?></td>
                                     <td class="num"><?= number_format((int)$row['visitors'], 0, '.', "'") ?></td>

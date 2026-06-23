@@ -109,53 +109,60 @@ body {
     gap: 1.25rem;
 }
 
-/* ===== Seitenfilter ===== */
-.filter-bar {
-    background: var(--card);
+/* ===== Aktiver Seitenfilter (Banner) ===== */
+.filter-active {
+    background: var(--navy);
+    color: #fff;
     border-radius: var(--radius);
-    box-shadow: 0 1px 3px rgba(0,0,0,.08);
-    padding: .75rem 1rem;
+    padding: .7rem 1rem;
     display: flex;
     align-items: center;
-    gap: .75rem;
+    gap: .6rem;
     flex-wrap: wrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
 
-.filter-label {
+.filter-active-label {
     font-size: .78rem;
-    font-weight: 600;
-    color: var(--muted);
     text-transform: uppercase;
     letter-spacing: .03em;
+    color: #aec6dd;
 }
 
-.filter-select {
-    flex: 1;
-    min-width: 200px;
-    font-family: inherit;
-    font-size: .85rem;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: .5rem .75rem;
-    cursor: pointer;
+.filter-active strong { font-weight: 700; }
+
+.filter-active-path {
+    font-size: .82rem;
+    color: #aec6dd;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
 }
 
-.filter-select:focus {
-    outline: none;
-    border-color: var(--blue);
-    box-shadow: 0 0 0 2px rgba(33,150,243,.2);
-}
-
-.filter-reset {
-    font-size: .8rem;
-    color: var(--muted);
+.filter-active-reset {
+    margin-left: auto;
+    font-size: .82rem;
+    color: #fff;
     text-decoration: none;
+    background: rgba(255,255,255,.15);
+    padding: .25rem .6rem;
+    border-radius: 6px;
     white-space: nowrap;
-    transition: color .15s;
+    transition: background .15s;
 }
-.filter-reset:hover { color: var(--blue); }
+.filter-active-reset:hover { background: rgba(255,255,255,.28); }
+
+/* ===== Klickbare Seite in der Tabelle ===== */
+.page-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    margin: -.4rem -.6rem;
+    padding: .4rem .6rem;
+    border-radius: 6px;
+    transition: background .15s;
+}
+.page-link:hover { background: var(--bg); }
+.page-link:hover .url-path { color: var(--blue); }
 
 /* ===== KPI Cards ===== */
 .kpi-grid {
@@ -349,7 +356,7 @@ a.url-path:hover { text-decoration: underline; color: var(--blue); }
     .topbar   { padding: 0 1rem; gap: .75rem; }
     .range-nav { display: none; }
     .content  { padding: 1rem; }
-    .filter-select { width: 100%; min-width: 0; }
+    .filter-active-reset { margin-left: 0; }
 }
 
 /* ===== Tooltip-Hilfetext ===== */

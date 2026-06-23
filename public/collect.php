@@ -113,9 +113,19 @@ function normalizePageUrl(string $url): array
     }
 
     // Tracking-Parameter entfernen: ?c= (Clubdesk Kontext), ?b= + ?s= (Newsletter), ?rfb= (Formular-Referenz)
+    // sowie gängige Marketing-/Klick-Tracker (utm_*, fbclid, gclid, …) – sonst zählt jede
+    // Variante als eigene Seite und bläht Statistik/Filter auf.
     if ($query !== null) {
         parse_str($query, $params);
         unset($params['c'], $params['b'], $params['s'], $params['rfb']);
+        foreach (array_keys($params) as $k) {
+            $lk = strtolower($k);
+            if (str_starts_with($lk, 'utm_')
+                || in_array($lk, ['fbclid','gclid','dclid','gclsrc','msclkid','yclid',
+                                  'twclid','igshid','mc_cid','mc_eid','wsidchk','pdata'], true)) {
+                unset($params[$k]);
+            }
+        }
         $query = $params ? http_build_query($params) : null;
     }
 
