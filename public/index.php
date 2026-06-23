@@ -20,6 +20,9 @@ $view = $_GET['view'] ?? 'real';
 if (!in_array($view, ['real', 'cms'], true)) $view = 'real';
 $isCmsFilter = ($view === 'cms') ? 1 : 0;
 
+// Optionaler Seitenfilter: einzelne URL aus dem Dropdown
+$urlFilter = trim((string) ($_GET['url'] ?? ''));
+
 $tz = new DateTimeZone('Europe/Zurich');
 $now = new DateTimeImmutable('now', $tz);
 
@@ -80,21 +83,31 @@ $hasNewsletterCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'newsle
 $cmsCondition = $hasCmsCol ? ' AND is_cms = :cms' : '';
 if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
 
-$totalPageviews   = (int) qVal($pdo, "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}", $p);
-$uniqueVisitors   = (int) qVal($pdo, "SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}", $p);
-$avgDuration      = (float) qVal($pdo, "SELECT AVG(duration) FROM pageviews WHERE created_at BETWEEN :s AND :e AND duration > 0 AND duration < 3600{$cmsCondition}", $p);
-$outboundClicks   = $view === 'cms' ? 0 : (int) qVal($pdo, "SELECT COUNT(*) FROM events WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'", [':s' => $startStr, ':e' => $endStr]);
+// Param-Set für die Dropdown-Auswahlliste (Zeitraum + cms, OHNE Seitenfilter)
+$pForOptions = $p;
+
+// Seitenfilter (gebundener Parameter → keine Injection-Gefahr)
+$urlCondition = $urlFilter !== '' ? ' AND url = :url' : '';
+if ($urlFilter !== '') $p[':url'] = $urlFilter;
+// Eigene Param-Sets für die events-Queries (mit/ohne Seitenfilter)
+$eventParams = [':s' => $startStr, ':e' => $endStr];
+if ($urlFilter !== '') $eventParams[':url'] = $urlFilter;
+
+$totalPageviews   = (int) qVal($pdo, "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}", $p);
+$uniqueVisitors   = (int) qVal($pdo, "SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}", $p);
+$avgDuration      = (float) qVal($pdo, "SELECT AVG(duration) FROM pageviews WHERE created_at BETWEEN :s AND :e AND duration > 0 AND duration < 3600{$cmsCondition}{$urlCondition}", $p);
+$outboundClicks   = $view === 'cms' ? 0 : (int) qVal($pdo, "SELECT COUNT(*) FROM events WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'{$urlCondition}", $eventParams);
 
 // Tägliche Übersicht für Chart
 $dailyRows = q($pdo,
     "SELECT DATE(created_at) as d, COUNT(*) as pv, COUNT(DISTINCT fingerprint) as uv
-     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
      GROUP BY DATE(created_at) ORDER BY d ASC", $p);
 
 // Top-Seiten (Pfad ohne Domain anzeigen)
 $topPages = q($pdo,
     "SELECT url, page_title, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
      GROUP BY url, page_title ORDER BY views DESC LIMIT 15", $p);
 
 // Top-Referrer (nur externe)
@@ -104,43 +117,51 @@ $topRefs = q($pdo,
     "SELECT referrer, COUNT(*) as cnt FROM pageviews
      WHERE created_at BETWEEN :s AND :e
      AND referrer != '' AND referrer IS NOT NULL
-     {$selfFilter}{$cmsCondition}
+     {$selfFilter}{$cmsCondition}{$urlCondition}
      GROUP BY referrer ORDER BY cnt DESC LIMIT 10",
     $p + $selfParams);
 
 // Geräte
 $devices = q($pdo,
     "SELECT device_type, COUNT(*) as cnt FROM pageviews
-     WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
      GROUP BY device_type ORDER BY cnt DESC", $p);
 
 // Top Länder
 $topCountries = q($pdo,
     "SELECT country, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-     FROM pageviews WHERE created_at BETWEEN :s AND :e AND country IS NOT NULL{$cmsCondition}
+     FROM pageviews WHERE created_at BETWEEN :s AND :e AND country IS NOT NULL{$cmsCondition}{$urlCondition}
      GROUP BY country ORDER BY visitors DESC LIMIT 10", $p);
 
 // Externe Links (nur im Besucher-View)
 $outboundLinks = $view === 'cms' ? [] : q($pdo,
     "SELECT event_value, COUNT(*) as clicks FROM events
-     WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'
-     GROUP BY event_value ORDER BY clicks DESC LIMIT 10", [':s' => $startStr, ':e' => $endStr]);
+     WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'{$urlCondition}
+     GROUP BY event_value ORDER BY clicks DESC LIMIT 10", $eventParams);
 
 // Newsletter-Batches
 $newsletterBatches = [];
 if ($hasNewsletterCol) {
     $newsletterBatches = q($pdo,
         "SELECT newsletter_batch, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-         FROM pageviews WHERE created_at BETWEEN :s AND :e AND newsletter_batch IS NOT NULL{$cmsCondition}
+         FROM pageviews WHERE created_at BETWEEN :s AND :e AND newsletter_batch IS NOT NULL{$cmsCondition}{$urlCondition}
          GROUP BY newsletter_batch ORDER BY views DESC LIMIT 10", $p);
 }
+
+// Auswahlliste für den Seitenfilter (Zeitraum + cms, ohne Seitenfilter)
+$pageOptions = q($pdo,
+    "SELECT url, MAX(page_title) AS page_title, COUNT(*) AS views
+     FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}
+     GROUP BY url ORDER BY views DESC", $pForOptions);
 
 // CMS-Zähler für Info-Banner (nur im Besucher-View)
 $cmsCount = 0;
 if ($hasCmsCol && $view === 'real') {
+    $cmsParams = [':s' => $startStr, ':e' => $endStr];
+    if ($urlFilter !== '') $cmsParams[':url'] = $urlFilter;
     $cmsCount = (int) qVal($pdo,
-        'SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e AND is_cms = 1',
-        [':s' => $startStr, ':e' => $endStr]
+        "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e AND is_cms = 1{$urlCondition}",
+        $cmsParams
     );
 }
 
@@ -268,6 +289,13 @@ function shortUrl(string $url): string
     return $result;
 }
 
+// Seitentitel bereinigen: "Titel – Zurich Sailing" → "Titel"
+function cleanTitle(?string $title): string
+{
+    $title = preg_replace('/\s*[-–|]\s*Zurich Sailing.*$/i', '', $title ?? '');
+    return trim((string) $title);
+}
+
 function countryFlag(string $code): string
 {
     // ISO 3166-1 alpha-2 → Regional Indicator Symbol (Flaggen-Emoji)
@@ -319,19 +347,42 @@ $deviceData   = array_column($devices, 'cnt');
         </div>
         <nav class="range-nav">
             <?php foreach (['today' => 'Heute', '7d' => '7 Tage', '30d' => '30 Tage', 'month' => 'Monat', 'lastmonth' => 'Vormonat'] as $key => $lbl): ?>
-                <a href="/?range=<?= $key ?>&view=<?= $view ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
+                <a href="/?range=<?= $key ?>&view=<?= $view ?>&url=<?= urlencode($urlFilter) ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
                     <?= $lbl ?>
                 </a>
             <?php endforeach; ?>
         </nav>
         <nav class="view-nav">
-            <a href="/?range=<?= $range ?>&view=real" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
-            <a href="/?range=<?= $range ?>&view=cms"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
+            <a href="/?range=<?= $range ?>&view=real&url=<?= urlencode($urlFilter) ?>" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
+            <a href="/?range=<?= $range ?>&view=cms&url=<?= urlencode($urlFilter) ?>"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>
 
     <main class="content">
+
+        <!-- Seitenfilter -->
+        <form class="filter-bar" method="get" action="/">
+            <input type="hidden" name="range" value="<?= htmlspecialchars($range) ?>">
+            <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
+            <label class="filter-label" for="urlFilter">Seite</label>
+            <select id="urlFilter" name="url" class="filter-select" onchange="this.form.submit()">
+                <option value="">Alle Seiten</option>
+                <?php foreach ($pageOptions as $opt): ?>
+                    <?php
+                        $optTitle = cleanTitle($opt['page_title']);
+                        $optPath  = shortUrl($opt['url']);
+                        $optLabel = $optTitle !== '' ? "{$optTitle} — {$optPath}" : $optPath;
+                    ?>
+                    <option value="<?= htmlspecialchars($opt['url']) ?>" <?= $opt['url'] === $urlFilter ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($optLabel) ?> (<?= number_format((int)$opt['views'], 0, '.', "'") ?>)
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <?php if ($urlFilter !== ''): ?>
+                <a class="filter-reset" href="/?range=<?= $range ?>&view=<?= $view ?>">&times; Filter zurücksetzen</a>
+            <?php endif; ?>
+        </form>
 
         <!-- KPI-Karten -->
         <div class="kpi-grid">
@@ -360,7 +411,7 @@ $deviceData   = array_column($devices, 'cnt');
         <?php if ($cmsCount > 0): ?>
         <div class="cms-hint">
             <?= number_format($cmsCount, 0, '.', "'") ?> <span class="hint" title="Seitenaufrufe durch Redakteure im Clubdesk-Editor – in der Besucher-Ansicht ausgeblendet">CMS-Aufrufe</span> im gleichen Zeitraum –
-            <a href="/?range=<?= $range ?>&view=cms">anzeigen &rarr;</a>
+            <a href="/?range=<?= $range ?>&view=cms&url=<?= urlencode($urlFilter) ?>">anzeigen &rarr;</a>
         </div>
         <?php endif; ?>
 
@@ -390,12 +441,7 @@ $deviceData   = array_column($devices, 'cnt');
                             <tr><td colspan="3" class="empty">Noch keine Daten</td></tr>
                         <?php else: ?>
                             <?php foreach ($topPages as $row): ?>
-                                <?php
-                                    // Seitentitel bereinigen: "Titel – Zurich Sailing" → "Titel"
-                                    $title = $row['page_title'] ?? '';
-                                    $title = preg_replace('/\s*[-–|]\s*Zurich Sailing.*$/i', '', $title);
-                                    $title = trim($title);
-                                ?>
+                                <?php $title = cleanTitle($row['page_title']); ?>
                                 <tr>
                                     <td>
                                         <?php if ($title !== ''): ?>
