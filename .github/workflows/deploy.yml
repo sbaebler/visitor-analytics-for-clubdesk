@@ -20,6 +20,8 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port:     21
+          # Cyon-FTPS neigt zu Control-Socket-Timeouts; Default (30s) grosszügig erhöhen
+          timeout:  120000
           local-dir:  ./
           server-dir: ${{ secrets.FTP_SERVER_DIR }}
           dangerous-clean-slate: false
