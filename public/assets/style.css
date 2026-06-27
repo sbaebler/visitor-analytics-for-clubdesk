@@ -387,6 +387,21 @@ a.url-path:hover { text-decoration: underline; color: var(--blue); }
     color: var(--muted);
 }
 
+/* Seiten-Karte: Spalten fest begrenzen, damit der eingerückte Baum nicht über
+   die Kartenbreite hinausläuft (sonst wird die rechte Spalte abgeschnitten).
+   Erste Spalte flexibel + Text-Ellipsis, Zahlenspalten schmal und fix. */
+#pages-card .data-table { table-layout: fixed; }
+#pages-card .data-table th:first-child,
+#pages-card .data-table td:first-child { overflow: hidden; }
+#pages-card .data-table th:nth-child(n+2),
+#pages-card .data-table td:nth-child(n+2) {
+    width: 5.5rem;
+    padding-left: .4rem;
+    padding-right: 1rem;
+}
+#pages-card .url-path,
+#pages-card .url-title { max-width: 100%; }
+
 .empty {
     text-align: center;
     color: var(--muted);
