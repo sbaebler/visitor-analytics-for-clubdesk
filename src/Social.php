@@ -140,6 +140,7 @@ class Social
     /**
      * Normalisiert eine URL exakt wie normalizePageUrl() in collect.php.
      * Muss synchron gehalten werden wenn collect.php geändert wird.
+     * Kanonische Spec: docs/url-normalization.md
      *
      * @return array{0: string, 1: string} [$normalizedPath, $host]
      */

@@ -149,10 +149,32 @@ var ZSDash = (function () {
     });
   }
 
+  // Umschalter "Häufigste" <-> "Sitemap" in der Seiten-Karte (ohne Neuladen)
+  function initPageTabs() {
+    var tabs = document.querySelectorAll('[data-pages-tab]');
+    if (!tabs.length) return;
+    var views = {
+      top: document.getElementById('pages-top'),
+      tree: document.getElementById('pages-tree'),
+    };
+    tabs.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var target = btn.getAttribute('data-pages-tab');
+        tabs.forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+        Object.keys(views).forEach(function (key) {
+          if (views[key]) views[key].hidden = key !== target;
+        });
+      });
+    });
+  }
+
   return {
     init: function (labels, pvData, uvData, deviceLabels, deviceData) {
       initLineChart(labels, pvData, uvData);
       initDeviceChart(deviceLabels, deviceData);
+      initPageTabs();
     },
     initUptime: function (labels, datasets, datasetLabels) {
       initUptimeChart(labels, datasets, datasetLabels);

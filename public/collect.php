@@ -92,6 +92,8 @@ function sanitizeStr(string $s, int $max = 512): string
     return mb_substr(strip_tags($s), 0, $max);
 }
 
+// Kanonische Spec: docs/url-normalization.md
+// Muss byte-identisch zu Social::normalizePageUrl() bleiben.
 function normalizePageUrl(string $url): array
 {
     $host  = parse_url($url, PHP_URL_HOST) ?? '';

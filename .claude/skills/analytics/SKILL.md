@@ -13,6 +13,10 @@ description: Architektur, Muster und Erweiterungsanleitung für visitor-analytic
 Wenn collect.php geändert wird → Social.php synchronisieren, und umgekehrt.
 Sonst stimmen die View-Counts im Widget nicht mit dem Admin-Dashboard überein.
 
+Kanonische Spec der Normalisierungsregeln: `docs/url-normalization.md`.
+Konsumenten (Dashboard, Social, Auswertungen) normalisieren **nicht** neu – sie machen höchstens
+reine Pfad-Extraktion zur Anzeige/Gruppierung.
+
 ## Fingerprinting: zwei verschiedene Hashes
 
 | Verwendung | Hash-Input | Warum |

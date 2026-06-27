@@ -20,8 +20,10 @@ $view = $_GET['view'] ?? 'real';
 if (!in_array($view, ['real', 'cms'], true)) $view = 'real';
 $isCmsFilter = ($view === 'cms') ? 1 : 0;
 
-// Optionaler Seitenfilter: einzelne URL aus dem Dropdown
+// Optionaler Seitenfilter: einzelne Seite (exact) oder ganzer Bereich inkl. Unterseiten (branch)
 $urlFilter = trim((string) ($_GET['url'] ?? ''));
+$urlScope  = $_GET['scope'] ?? 'exact';
+if (!in_array($urlScope, ['exact', 'branch'], true)) $urlScope = 'exact';
 
 $tz = new DateTimeZone('Europe/Zurich');
 $now = new DateTimeImmutable('now', $tz);
@@ -84,14 +86,24 @@ $cmsCondition = $hasCmsCol ? ' AND is_cms = :cms' : '';
 if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
 
 // Seitenfilter: $urlFilter ist ein Pfad (z. B. /segelsport/breitensport/zlc).
-// pageviews.url ist bereits pfad-normalisiert → Query-String abschneiden und vergleichen.
-// (gebundener Parameter → keine Injection-Gefahr)
-$urlCondition = $urlFilter !== '' ? " AND SUBSTRING_INDEX(url, '?', 1) = :url" : '';
-if ($urlFilter !== '') $p[':url'] = $urlFilter;
-// events.url wird roh gespeichert (mit Domain + Query) → erst Domain & Query entfernen.
-$eventUrlCondition = $urlFilter !== '' ? " AND SUBSTRING_INDEX(REGEXP_REPLACE(url, '^https?://[^/]+', ''), '?', 1) = :url" : '';
+// Vergleich auf den reinen Pfad: Domain (CMS-/Event-URLs) und Query-String entfernen –
+// so matchen Besucher- und CMS-Zeilen konsistent (siehe docs/url-normalization.md).
+// scope=branch: ganzer Bereich inkl. Unterseiten (Pfad selbst ODER Pfad gefolgt von '/').
+// (gebundene Parameter → keine Injection-Gefahr)
+$pathExpr    = "SUBSTRING_INDEX(REGEXP_REPLACE(url, '^https?://[^/]+', ''), '?', 1)";
 $eventParams = [':s' => $startStr, ':e' => $endStr];
-if ($urlFilter !== '') $eventParams[':url'] = $urlFilter;
+$urlCondition = $eventUrlCondition = '';
+if ($urlFilter !== '') {
+    if ($urlScope === 'branch') {
+        $urlCondition = " AND ({$pathExpr} = :url OR {$pathExpr} LIKE :urlpre)";
+        $p[':url'] = $eventParams[':url'] = $urlFilter;
+        $p[':urlpre'] = $eventParams[':urlpre'] = $urlFilter . '/%';
+    } else {
+        $urlCondition = " AND {$pathExpr} = :url";
+        $p[':url'] = $eventParams[':url'] = $urlFilter;
+    }
+    $eventUrlCondition = $urlCondition;
+}
 
 $totalPageviews   = (int) qVal($pdo, "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}", $p);
 $uniqueVisitors   = (int) qVal($pdo, "SELECT COUNT(DISTINCT fingerprint) FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}", $p);
@@ -104,12 +116,21 @@ $dailyRows = q($pdo,
      FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
      GROUP BY DATE(created_at) ORDER BY d ASC", $p);
 
-// Top-Seiten (nach Pfad gruppiert – Query-String-Varianten zusammenfassen)
-$topPages = q($pdo,
+// Alle Seiten (nach Pfad gruppiert – Query-String-Varianten zusammenfassen).
+// Eine Query bedient beide Ansichten: Top-Liste und Sitemap-Baum.
+$allPages = q($pdo,
     "SELECT SUBSTRING_INDEX(url, '?', 1) AS url, MAX(page_title) AS page_title,
             COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
      FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
-     GROUP BY SUBSTRING_INDEX(url, '?', 1) ORDER BY views DESC LIMIT 15", $p);
+     GROUP BY SUBSTRING_INDEX(url, '?', 1)", $p);
+
+// Häufigste Seiten: Top 15 nach Aufrufen
+$topPages = $allPages;
+usort($topPages, fn($a, $b) => (int)$b['views'] <=> (int)$a['views']);
+$topPages = array_slice($topPages, 0, 15);
+
+// Sitemap: hierarchischer Baum aus den Pfaden (alle Seiten)
+$pageTree = buildPageTree($allPages);
 
 // Top-Referrer (nur externe)
 $selfFilter = $selfDomain !== '' ? 'AND referrer NOT LIKE :self' : '';
@@ -164,7 +185,10 @@ if ($urlFilter !== '') {
 $cmsCount = 0;
 if ($hasCmsCol && $view === 'real') {
     $cmsParams = [':s' => $startStr, ':e' => $endStr];
-    if ($urlFilter !== '') $cmsParams[':url'] = $urlFilter;
+    if ($urlFilter !== '') {
+        $cmsParams[':url'] = $urlFilter;
+        if ($urlScope === 'branch') $cmsParams[':urlpre'] = $urlFilter . '/%';
+    }
     $cmsCount = (int) qVal($pdo,
         "SELECT COUNT(*) FROM pageviews WHERE created_at BETWEEN :s AND :e AND is_cms = 1{$urlCondition}",
         $cmsParams
@@ -295,6 +319,103 @@ function shortUrl(string $url): string
     return $result;
 }
 
+// Sitemap-Baum aus den gruppierten Seiten aufbauen.
+// Konsumenten normalisieren nicht neu (siehe docs/url-normalization.md) – hier nur
+// reine Pfad-Extraktion zur Gruppierung: Query/Host weg, Trailing Slash trimmen.
+// Jede Zeile zählt nur ihre eigenen Aufrufe; reine Zwischen-Verzeichnisse ohne eigenen
+// Pageview entstehen als Knoten ohne Zahlen (views/visitors = null, hasOwn = false).
+// Die Root-Seite '/' ist der Wurzelknoten, alle Pfade hängen als Unterknoten darunter.
+function buildPageTree(array $pages): array
+{
+    $root = ['segment' => '/', 'path' => '/', 'title' => '', 'views' => null,
+             'visitors' => null, 'hasOwn' => false, 'children' => []];
+
+    foreach ($pages as $row) {
+        $path = parse_url(shortUrl((string) $row['url']), PHP_URL_PATH) ?: '/';
+        $path = '/' . trim($path, '/');                    // Trailing Slash weg, Root = '/'
+        $segs = $path === '/' ? [] : explode('/', ltrim($path, '/'));
+
+        // Ast bis zum Zielknoten durchlaufen, Zwischenknoten bei Bedarf anlegen
+        $node = &$root;
+        $acc  = '';
+        foreach ($segs as $seg) {
+            $acc .= '/' . $seg;
+            if (!isset($node['children'][$acc])) {
+                $node['children'][$acc] = [
+                    'segment'  => $seg,
+                    'path'     => $acc,
+                    'title'    => '',
+                    'views'    => null,
+                    'visitors' => null,
+                    'hasOwn'   => false,
+                    'children' => [],
+                ];
+            }
+            $node = &$node['children'][$acc];
+        }
+
+        // Eigene Kennzahlen am Zielknoten (Root, wenn $segs leer) setzen/aufsummieren
+        $node['hasOwn']   = true;
+        $node['title']    = $node['title'] ?: (string) ($row['page_title'] ?? '');
+        $node['views']    = (int) $node['views'] + (int) $row['views'];
+        $node['visitors'] = (int) $node['visitors'] + (int) $row['visitors'];
+        unset($node);
+    }
+
+    sortTree($root['children']);
+    return $root;
+}
+
+// Kinder rekursiv alphabetisch nach Pfad-Key sortieren
+function sortTree(array &$nodes): void
+{
+    uksort($nodes, 'strcmp');
+    foreach ($nodes as &$n) {
+        if (!empty($n['children'])) sortTree($n['children']);
+    }
+    unset($n);
+}
+
+// Sitemap-Knoten rekursiv als Tabellenzeilen rendern.
+// Eigene Seite → exakter Filter; Verzeichnis (mit Kindern) → Branch-Filter (ganzer Bereich).
+function renderPageTree(array $node, int $depth, string $range, string $view): string
+{
+    $html = '';
+    $isDir = !empty($node['children']);
+    $scope = $isDir ? 'branch' : 'exact';
+    $title = cleanTitle($node['title']);
+    $label = $depth === 0 ? 'Startseite' : $node['segment'];
+
+    $href = '/?range=' . $range . '&view=' . $view
+          . '&url=' . urlencode($node['path']) . '&scope=' . $scope;
+    $titleAttr = ($isDir ? 'Auf ganzen Bereich filtern' : 'Auf diese Seite filtern')
+               . ' – ' . $node['path'];
+
+    $views    = $node['hasOwn'] ? number_format((int) $node['views'], 0, '.', "'") : '–';
+    $visitors = $node['hasOwn'] ? number_format((int) $node['visitors'], 0, '.', "'") : '–';
+    $rowClass = $node['hasOwn'] ? '' : ' tree-group';
+
+    $html .= '<tr class="tree-row' . $rowClass . '">';
+    $html .= '<td><span class="tree-cell" style="--depth:' . $depth . '">';
+    $html .= '<a class="page-link" href="' . htmlspecialchars($href) . '" title="'
+           . htmlspecialchars($titleAttr) . '">';
+    if ($title !== '' && $node['hasOwn']) {
+        $html .= '<span class="url-path">' . htmlspecialchars($title) . '</span>';
+        $html .= '<span class="url-title">' . htmlspecialchars($label) . '</span>';
+    } else {
+        $html .= '<span class="url-path">' . htmlspecialchars($label) . '</span>';
+    }
+    $html .= '</a></span></td>';
+    $html .= '<td class="num">' . $views . '</td>';
+    $html .= '<td class="num">' . $visitors . '</td>';
+    $html .= '</tr>';
+
+    foreach ($node['children'] as $child) {
+        $html .= renderPageTree($child, $depth + 1, $range, $view);
+    }
+    return $html;
+}
+
 // Seitentitel bereinigen: "Titel – Zurich Sailing" → "Titel"
 function cleanTitle(?string $title): string
 {
@@ -353,14 +474,14 @@ $deviceData   = array_column($devices, 'cnt');
         </div>
         <nav class="range-nav">
             <?php foreach (['today' => 'Heute', '7d' => '7 Tage', '30d' => '30 Tage', 'month' => 'Monat', 'lastmonth' => 'Vormonat'] as $key => $lbl): ?>
-                <a href="/?range=<?= $key ?>&view=<?= $view ?>&url=<?= urlencode($urlFilter) ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
+                <a href="/?range=<?= $key ?>&view=<?= $view ?>&url=<?= urlencode($urlFilter) ?>&scope=<?= $urlScope ?>" class="range-btn <?= $range === $key ? 'active' : '' ?>">
                     <?= $lbl ?>
                 </a>
             <?php endforeach; ?>
         </nav>
         <nav class="view-nav">
-            <a href="/?range=<?= $range ?>&view=real&url=<?= urlencode($urlFilter) ?>" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
-            <a href="/?range=<?= $range ?>&view=cms&url=<?= urlencode($urlFilter) ?>"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
+            <a href="/?range=<?= $range ?>&view=real&url=<?= urlencode($urlFilter) ?>&scope=<?= $urlScope ?>" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
+            <a href="/?range=<?= $range ?>&view=cms&url=<?= urlencode($urlFilter) ?>&scope=<?= $urlScope ?>"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>
@@ -370,11 +491,11 @@ $deviceData   = array_column($devices, 'cnt');
         <?php if ($urlFilter !== ''): ?>
         <!-- Aktiver Seitenfilter -->
         <div class="filter-active">
-            <span class="filter-active-label">Gefiltert auf Seite:</span>
+            <span class="filter-active-label"><?= $urlScope === 'branch' ? 'Gefiltert auf Bereich:' : 'Gefiltert auf Seite:' ?></span>
             <?php if ($filterTitle !== ''): ?>
                 <strong><?= htmlspecialchars($filterTitle) ?></strong>
             <?php endif; ?>
-            <span class="filter-active-path"><?= htmlspecialchars(shortUrl($urlFilter)) ?></span>
+            <span class="filter-active-path"><?= htmlspecialchars(shortUrl($urlFilter)) ?><?= $urlScope === 'branch' ? '/* (inkl. Unterseiten)' : '' ?></span>
             <a class="filter-active-reset" href="/?range=<?= $range ?>&view=<?= $view ?>">&times; Filter entfernen</a>
         </div>
         <?php endif; ?>
@@ -406,7 +527,7 @@ $deviceData   = array_column($devices, 'cnt');
         <?php if ($cmsCount > 0): ?>
         <div class="cms-hint">
             <?= number_format($cmsCount, 0, '.', "'") ?> <span class="hint" title="Seitenaufrufe durch Redakteure im Clubdesk-Editor – in der Besucher-Ansicht ausgeblendet">CMS-Aufrufe</span> im gleichen Zeitraum –
-            <a href="/?range=<?= $range ?>&view=cms&url=<?= urlencode($urlFilter) ?>">anzeigen &rarr;</a>
+            <a href="/?range=<?= $range ?>&view=cms&url=<?= urlencode($urlFilter) ?>&scope=<?= $urlScope ?>">anzeigen &rarr;</a>
         </div>
         <?php endif; ?>
 
@@ -422,12 +543,18 @@ $deviceData   = array_column($devices, 'cnt');
 
         <!-- Zwei Spalten -->
         <div class="two-col">
-            <!-- Top Seiten -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Häufigste Seiten</h2>
+            <!-- Top Seiten / Sitemap -->
+            <div class="card" id="pages-card">
+                <div class="card-header card-header-tabs">
+                    <h2 class="card-title">Seiten</h2>
+                    <div class="card-tabs" role="tablist">
+                        <button type="button" class="tab-btn active" data-pages-tab="top">Häufigste</button>
+                        <button type="button" class="tab-btn" data-pages-tab="tree">Sitemap</button>
+                    </div>
                 </div>
-                <table class="data-table">
+
+                <!-- Ansicht: Häufigste Seiten -->
+                <table class="data-table" id="pages-top">
                     <thead>
                         <tr><th>Seite</th><th>Aufrufe</th><th>Besucher</th></tr>
                     </thead>
@@ -438,7 +565,7 @@ $deviceData   = array_column($devices, 'cnt');
                             <?php foreach ($topPages as $row): ?>
                                 <?php
                                     $title = cleanTitle($row['page_title']);
-                                    $pageHref = '/?range=' . $range . '&view=' . $view . '&url=' . urlencode($row['url']);
+                                    $pageHref = '/?range=' . $range . '&view=' . $view . '&url=' . urlencode($row['url']) . '&scope=exact';
                                 ?>
                                 <tr>
                                     <td>
@@ -455,6 +582,20 @@ $deviceData   = array_column($devices, 'cnt');
                                     <td class="num"><?= number_format((int)$row['visitors'], 0, '.', "'") ?></td>
                                 </tr>
                             <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+
+                <!-- Ansicht: Sitemap (hierarchisch nach Pfad) -->
+                <table class="data-table" id="pages-tree" hidden>
+                    <thead>
+                        <tr><th>Seite</th><th>Aufrufe</th><th>Besucher</th></tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($allPages)): ?>
+                            <tr><td colspan="3" class="empty">Noch keine Daten</td></tr>
+                        <?php else: ?>
+                            <?= renderPageTree($pageTree, 0, $range, $view) ?>
                         <?php endif; ?>
                     </tbody>
                 </table>

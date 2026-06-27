@@ -44,7 +44,7 @@ src/
 - `config/config.php` enthält Secrets → nie committen (in .gitignore)
 - `setup/install.php` nach erstem Aufruf über .htaccess gesperrt
 - Keine globalen Funktionen in neuen Dateien – Klassen verwenden (wie `Auth`, `Database`, `Social`)
-- URL-Normalisierung: `Social::normalizePageUrl()` und `normalizePageUrl()` in `collect.php` müssen **identisch** bleiben – sonst stimmen Widget-View-Counts nicht mit Dashboard überein
+- URL-Normalisierung: `Social::normalizePageUrl()` und `normalizePageUrl()` in `collect.php` müssen **identisch** bleiben – sonst stimmen Widget-View-Counts nicht mit Dashboard überein. Kanonische Spec: `docs/url-normalization.md`
 - Schweizer Zahlenformat: `number_format($n, 0, '.', "'")` überall wo Zahlen angezeigt werden
 - `social.php` und `widget.php` überschreiben `X-Frame-Options: DENY` via `header()` (erlauben iframe-Einbettung)
 
