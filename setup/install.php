@@ -1,24 +1,27 @@
 <?php
 /**
- * Einmalig ausführen, um die Datenbanktabellen zu erstellen.
- * Danach diese Datei löschen oder mit Passwort schützen.
+ * Optionaler Helfer: legt die Datenbank an und erstellt alle Tabellen.
  *
- * Aufruf: https://stats.YOUR-DOMAIN.COM/setup/install.php?token=DEIN_TOKEN
- * (Token muss mit dem in config.php gesetzten INSTALL_TOKEN übereinstimmen)
+ * Standard-Weg für neue Installationen ist der Import von
+ * `setup/schema.sql` via phpMyAdmin (siehe README Schritt 4).
+ *
+ * Dieses Skript ist eine SSH/CLI-Alternative, die zusätzlich die DB anlegt:
+ *   php setup/install.php
+ *
+ * Läuft nur via CLI – ein Web-Aufruf wird abgewiesen (setup/ ist ohnehin
+ * per .htaccess gesperrt und liegt ausserhalb des Document Roots).
  */
+
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    die('Nur via CLI ausführbar: php setup/install.php');
+}
 
 $configFile = __DIR__ . '/../config/config.php';
 if (!file_exists($configFile)) {
     die('config/config.php fehlt. Erstelle sie aus config/config.sample.php.');
 }
 $config = require $configFile;
-
-// Einfacher Schutz: Token in der URL
-$expectedToken = $config['install_token'] ?? null;
-if (!$expectedToken || ($_GET['token'] ?? '') !== $expectedToken) {
-    http_response_code(403);
-    die('Zugriff verweigert. Token fehlt oder falsch.');
-}
 
 try {
     $dsn = sprintf(

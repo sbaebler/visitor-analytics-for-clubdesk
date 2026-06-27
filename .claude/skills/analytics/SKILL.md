@@ -53,9 +53,10 @@ Social::jsonResponse($data);
 
 ## Muster: DB-Migration
 
-1. `setup/install.php` → `CREATE TABLE IF NOT EXISTS` Block ergänzen
-2. `setup/migrate_NAME.sql` → für bestehende Installationen
-3. `public/index.php` → Falls nötig `SHOW COLUMNS ... LIKE 'neue_spalte'` für graceful degradation
+1. `setup/schema.sql` → kanonisches Voll-Schema (Quelle für neue Installationen via phpMyAdmin-Import) ergänzen
+2. `setup/install.php` → `CREATE TABLE IF NOT EXISTS` Block synchron halten (CLI-Helfer)
+3. `setup/migrate_NAME.sql` → für bestehende Installationen
+4. `public/index.php` → Falls nötig `SHOW COLUMNS ... LIKE 'neue_spalte'` für graceful degradation
 
 ## CSS Design-System
 

@@ -42,11 +42,17 @@ cp config/config.sample.php config/config.php
   ```
   Als `password_hash` eintragen.
 
-### 4. Tabellen erstellen
-Einmalig aufrufen (danach Datei löschen oder über Hosting-Panel sperren):
+### 4. Datenbank-Schema importieren
+phpMyAdmin (oder ein anderes DB-Tool) öffnen → die in Schritt 2 angelegte
+Datenbank auswählen → **Importieren** → die Datei `setup/schema.sql` hochladen.
+
+Alternativ via SSH:
+```bash
+mysql -u DEIN_DB_USER -p DEIN_DB_NAME < setup/schema.sql
 ```
-https://stats.YOUR-DOMAIN.COM/setup/install.php?token=DEIN_INSTALL_TOKEN
-```
+
+(Optionaler SSH-Helfer, der die DB anlegt *und* das Schema importiert:
+`php setup/install.php`.)
 
 ### 5. Tracker auf Clubdesk-Website einbinden
 
@@ -79,7 +85,7 @@ Folgende GitHub Secrets setzen:
 
 ## Sicherheitshinweise
 - `config/config.php` ist in `.gitignore` – nie committen
-- `setup/install.php` nach dem ersten Aufruf löschen
+- `setup/` liegt ausserhalb des Document Roots (`public/`) und ist per `.htaccess` zusätzlich gesperrt – keine Aufräumschritte nötig
 - Alle Security Headers sind in `.htaccess` gesetzt (HSTS, X-Frame, etc.)
 - CORS beschränkt auf die konfigurierten `allowed_origins`
 - IP-Adressen werden nie gespeichert (nur täglicher SHA-256-Hash)

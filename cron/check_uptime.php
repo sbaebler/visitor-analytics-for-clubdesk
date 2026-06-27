@@ -6,10 +6,10 @@ declare(strict_types=1);
  *
  * Cron-Eintrag auf cyon.ch (cPanel):
  *   Intervall: * /15 * * * *  (alle 15 Minuten, Leerzeichen vor /15 entfernen)
- *   Befehl:    /usr/local/bin/php /home/vabavoco/public_html/stats/cron/check_uptime.php
+ *   Befehl:    /usr/local/bin/php /home/USER/public_html/stats/cron/check_uptime.php
  *
  * PHP-Pfad prüfen via cPanel → Terminal: which php
- * Log-Ausgabe optional: >> /home/vabavoco/logs/uptime.log 2>&1
+ * Log-Ausgabe optional: >> /home/USER/logs/uptime.log 2>&1
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -25,7 +25,7 @@ $targets = $config['uptime_targets'] ?? [];
 
 const TIMEOUT      = 10;
 const MAX_REDIRECTS = 5;
-const USER_AGENT   = 'ZurichSailing-Monitor/1.0';
+define('USER_AGENT', preg_replace('/\s+/', '', $config['site_name'] ?? 'Clubdesk-Analytics') . '-Monitor/1.0');
 
 // --- Checks ausführen ---
 $checkTime = (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))->format('Y-m-d H:i:s');

@@ -15,7 +15,9 @@
     </IfModule>
 </Files>
 
-# PHP-Dateien im setup/-Ordner blockieren (aus Document Root erreichbar via /setup/)
+# Defense-in-Depth: setup/ liegt normalerweise ausserhalb des Document Roots
+# (public/) und ist damit gar nicht web-erreichbar. Diese Regeln blockieren es
+# zusätzlich, falls der Document Root versehentlich auf das Repo-Root zeigt.
 <Files "install.php">
     Order allow,deny
     Deny from all

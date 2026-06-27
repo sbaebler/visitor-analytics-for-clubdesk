@@ -30,7 +30,8 @@ public/                 Document Root der Subdomain
     style.css           Design-System (--navy, --blue, --blue-l etc.)
     dashboard.js        Chart.js-Wrapper (ZSDash.init / ZSDash.initUptime)
 setup/
-  install.php           Einmaliger DB-Setup (via ?token=...)
+  schema.sql            Kanonisches Voll-Schema – Standard-Setup via phpMyAdmin-Import
+  install.php           Optionaler CLI-Helfer (php setup/install.php) – legt DB an + Tabellen
   migrate_social.sql    ← NEU: Social-Tabellen für bestehende Installationen
 src/
   Auth.php              Session-Auth für Admin-Dashboard
@@ -108,7 +109,7 @@ nicht statisch im Template gesetzt.
 
 **Neue Sprache:** `$labels`-Array in `widget.php` und `L`-Objekt in JS erweitern.
 
-**Neue DB-Spalte in pageviews:** `setup/install.php` (CREATE TABLE) + neue `setup/migrate_*.sql` Datei für bestehende Installationen + `collect.php` anpassen.
+**Neue DB-Spalte in pageviews:** `setup/schema.sql` (kanonisches Voll-Schema, für neue Installationen) **und** `setup/install.php` (CREATE TABLE, CLI-Helfer) synchron halten + neue `setup/migrate_*.sql` Datei für bestehende Installationen + `collect.php` anpassen.
 
 **Admin-Dashboard erweitern:** Queries in `public/index.php`, HTML darunter. CSS-Klassen aus `assets/style.css` verwenden.
 

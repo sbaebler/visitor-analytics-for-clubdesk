@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Social Widget – wird via <iframe> in Clubdesk-Seiten eingebettet.
  *
- * URL: https://stats.zurich-sailing.ch/widget.php?url=PAGE_URL&lang=de
+ * URL: https://stats.YOUR-DOMAIN.COM/widget.php?url=PAGE_URL&lang=de
  *
  * Parameter:
  *   url   (required) vollständige URL der Clubdesk-Seite
@@ -12,7 +12,11 @@ declare(strict_types=1);
  */
 
 $config  = require __DIR__ . '/../config/config.php';
-$baseUrl = rtrim($config['social']['base_url'] ?? 'https://stats.zurich-sailing.ch', '/');
+$baseUrl = rtrim(
+    $config['social']['base_url']
+        ?? ((!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '')),
+    '/'
+);
 
 $pageUrl = filter_var($_GET['url'] ?? '', FILTER_VALIDATE_URL) ? $_GET['url'] : '';
 $lang    = in_array($_GET['lang'] ?? 'de', ['de', 'fr', 'en'], true)
