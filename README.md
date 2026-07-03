@@ -74,6 +74,21 @@ Der Code wird damit automatisch auf allen Seiten der Website kurz vor `</body>` 
 https://stats.YOUR-DOMAIN.COM/
 ```
 
+### 7. Content-Change-Detection einrichten (optional)
+
+Erkennt alle 30 Minuten Änderungen an allen Seiten gemäss Sitemap und
+protokolliert sie – Grundlage für spätere Notification-E-Mails/Analysen.
+Details: [`docs/content-change-detection.md`](docs/content-change-detection.md).
+
+1. In `config/config.php` den Block `sitemap_monitor` ausfüllen (`sitemap_url`
+   auf die eigene Sitemap zeigen lassen, ggf. `fallback_urls` ergänzen).
+2. Cron-Job auf Cyon (cPanel) einrichten, analog zum Uptime-Monitor:
+   ```
+   Intervall: */30 * * * *
+   Befehl:    /usr/local/bin/php /home/USER/public_html/stats/cron/check_changes.php
+   ```
+   (siehe Docblock in `cron/check_changes.php` für Details, z.B. PHP-Pfad prüfen).
+
 ## Deployment mit GitHub Actions
 
 Das enthaltene Workflow-Template (`.github/workflows/deploy.yml`) deployed via FTPS.

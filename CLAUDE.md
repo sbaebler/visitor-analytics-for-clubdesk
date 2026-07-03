@@ -18,6 +18,7 @@ config/
   config.php            ⚠️  Secrets – NICHT committen (.gitignore)
 cron/
   check_uptime.php      Uptime-Monitor, läuft alle 15 Min. via Cron auf Cyon
+  check_changes.php     ← NEU: Content-Change-Detection, läuft alle 30 Min. via Cron auf Cyon
 public/                 Document Root der Subdomain
   .htaccess             Security-Header, Caching, setup/-Schutz
   collect.php           Tracking-Endpunkt (POST von tracker.js)
@@ -33,10 +34,12 @@ setup/
   schema.sql            Kanonisches Voll-Schema – Standard-Setup via phpMyAdmin-Import
   install.php           Optionaler CLI-Helfer (php setup/install.php) – legt DB an + Tabellen
   migrate_social.sql    ← NEU: Social-Tabellen für bestehende Installationen
+  migrate_page_changes.sql ← NEU: Content-Change-Detection-Tabellen für bestehende Installationen
 src/
   Auth.php              Session-Auth für Admin-Dashboard
   Database.php          PDO-Singleton
   Social.php            ← NEU: Like-Logik, URL-Hashing, Stats
+  SitemapMonitor.php    ← NEU: Sitemap-Parsing, Content-Diff, Change-Detection
 ```
 
 ## Wichtige Regeln
@@ -56,10 +59,13 @@ events         – Outbound-Link-Klicks
 uptime_checks  – Uptime-Monitor-Resultate
 social_likes   – Wer hat welche URL geliked (url_hash + ip_hash, kein PII)
 social_stats   – Aggregat-Cache: like_count pro url_hash
+tracked_pages  – Content-Change-Detection: aktueller Content-Hash pro überwachter Seite (Vergleichs-Baseline)
+page_changes   – Content-Change-Detection: Log jeder erkannten Content-Änderung (inkl. Diff-Excerpt)
 ```
 
 View-Counts im Widget kommen aus `pageviews` (kein Duplikat).
 Like-Counts kommen aus `social_stats` (Aggregat für Performance).
+Content-Änderungen kommen aus `page_changes`, siehe `docs/content-change-detection.md`.
 
 ## Deployment
 
@@ -112,6 +118,8 @@ nicht statisch im Template gesetzt.
 **Neue DB-Spalte in pageviews:** `setup/schema.sql` (kanonisches Voll-Schema, für neue Installationen) **und** `setup/install.php` (CREATE TABLE, CLI-Helfer) synchron halten + neue `setup/migrate_*.sql` Datei für bestehende Installationen + `collect.php` anpassen.
 
 **Admin-Dashboard erweitern:** Queries in `public/index.php`, HTML darunter. CSS-Klassen aus `assets/style.css` verwenden.
+
+**Content-Change-Detection anpassen:** `src/SitemapMonitor.php` (Sitemap-Parsing, Content-Cleaning, Diff-Logik), `cron/check_changes.php` (Cron-Einstiegspunkt), Config unter `config['sitemap_monitor']`. Kanonische Spec: `docs/content-change-detection.md`. Normalisierung ausschliesslich via `Social::normalizePageUrl()` (keine dritte Implementierung).
 
 ## Skill
 

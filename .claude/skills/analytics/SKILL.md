@@ -55,6 +55,17 @@ Social::setCorsHeaders($config);
 Social::jsonResponse($data);
 ```
 
+## Content-Change-Detection
+
+`cron/check_changes.php` + `src/SitemapMonitor.php` erkennen alle 30 Minuten
+Änderungen an allen Sitemap-Seiten (`tracked_pages`/`page_changes`).
+Kanonische Spec: `docs/content-change-detection.md`.
+
+Wichtig: `SitemapMonitor` normalisiert Sitemap-URLs **ausschliesslich** über
+`Social::normalizePageUrl()` – es gibt bewusst **keine** dritte, eigene
+Normalisierungs-Implementierung. Gespeichert wird der normalisierte Pfad
+(gleiche Form wie `pageviews.url`), nicht die rohe absolute URL.
+
 ## Muster: DB-Migration
 
 1. `setup/schema.sql` → kanonisches Voll-Schema (Quelle für neue Installationen via phpMyAdmin-Import) ergänzen
