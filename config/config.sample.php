@@ -40,5 +40,28 @@ return [
         // Basis-URL des Analytics-Servers (ohne trailing slash)
         'base_url' => 'https://stats.YOUR-DOMAIN.COM',
     ],
+
+    // Content-Change-Detection: erkennt Änderungen an allen Sitemap-Seiten
+    // (läuft via cron/check_changes.php, siehe docs/content-change-detection.md)
+    'sitemap_monitor' => [
+        'enabled'          => true,
+        // Sitemap-URL (Sitemap-Index mit Unter-Sitemaps wird automatisch aufgelöst)
+        'sitemap_url'      => 'https://YOUR-DOMAIN.COM/sitemap.xml',
+        // Zusätzliche/alternative URLs, die immer geprüft werden – Ergänzung zur
+        // Sitemap oder alleinige Quelle, falls sitemap_url leer bleibt oder der
+        // Abruf fehlschlägt
+        'fallback_urls'    => [
+            // 'https://YOUR-DOMAIN.COM/',
+        ],
+        'timeout'          => 10,     // Sekunden pro Request
+        'delay_ms'         => 200,    // Pause zwischen Seitenabrufen (Ziel-Server schonen)
+        'max_pages'        => 300,    // Sicherheitslimit pro Lauf (Laufzeit-/Lastschutz)
+        // Regex-Muster gegen den normalisierten Pfad – zusätzlich zu eingebauten
+        // Datei-Endungs-Ausschlüssen (pdf, jpg, zip, ...)
+        'exclude_patterns' => [
+            // '#^/media/#',
+        ],
+        'retention_days'   => 180,    // Aufbewahrung page_changes-Log
+    ],
 ];
 

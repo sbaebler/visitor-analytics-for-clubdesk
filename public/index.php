@@ -301,6 +301,23 @@ if ($hasUptimeTable && !empty($uptimeTargets)) {
     );
 }
 
+// --- Content-Änderungen (graceful degradation) ---
+$hasPageChangesTable = false;
+$recentPageChanges   = [];
+$trackedPageCount    = 0;
+
+try {
+    $hasPageChangesTable = (bool) $pdo->query("SHOW TABLES LIKE 'page_changes'")->fetch();
+} catch (PDOException $e) {}
+
+if ($hasPageChangesTable) {
+    $recentPageChanges = q($pdo,
+        "SELECT url, lines_added, lines_removed, change_size, detected_at
+         FROM page_changes ORDER BY detected_at DESC LIMIT 10"
+    );
+    $trackedPageCount = (int) qVal($pdo, "SELECT COUNT(*) FROM tracked_pages WHERE in_sitemap = 1");
+}
+
 // --- Hilfsfunktionen ---
 function formatDuration(float $secs): string
 {
@@ -850,6 +867,42 @@ $deviceData   = array_column($devices, 'cnt');
         <?php endif; ?>
 
         <?php endif; // hasUptimeTable ?>
+
+        <?php if ($hasPageChangesTable): ?>
+        <!-- Content-Änderungen -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Content-Änderungen</h2>
+            </div>
+            <p class="hint">
+                <?= number_format($trackedPageCount, 0, '.', "'") ?> überwachte Seite<?= $trackedPageCount === 1 ? '' : 'n' ?> gemäss Sitemap ·
+                Prüfung alle 30 Minuten (<code>cron/check_changes.php</code>)
+            </p>
+            <?php if (empty($recentPageChanges)): ?>
+            <p class="empty">Noch keine Änderungen erkannt.</p>
+            <?php else: ?>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Zeitpunkt</th><th>Seite</th><th>Zeilen +/−</th><th>Änderungsgrösse</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($recentPageChanges as $chg): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($chg['detected_at']) ?></td>
+                        <td>
+                            <a href="https://<?= htmlspecialchars($config['self_domain'] ?? '') ?><?= htmlspecialchars($chg['url']) ?>" target="_blank" rel="noopener">
+                                <?= htmlspecialchars($chg['url']) ?>
+                            </a>
+                        </td>
+                        <td class="num">+<?= number_format((int)$chg['lines_added'], 0, '.', "'") ?> / −<?= number_format((int)$chg['lines_removed'], 0, '.', "'") ?></td>
+                        <td class="num"><?= number_format((int)$chg['change_size'], 0, '.', "'") ?> Zeichen</td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </div>
+        <?php endif; // hasPageChangesTable ?>
 
     </main>
 
