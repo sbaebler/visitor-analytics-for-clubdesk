@@ -18,11 +18,18 @@ class Social
 
     /**
      * SHA256 der normalisierten URL – Primärschlüssel für alle Social-Tabellen.
+     *
+     * WICHTIG: kein strtolower(). Der Hash muss byte-identisch zu MySQL
+     * `SHA2(url, 256)` über den in `pageviews.url` gespeicherten Wert sein
+     * (siehe getStats()). collect.php speichert die normalisierte URL unverändert –
+     * u. a. Beitrags-Pfade wie `/beitrag/ND1000032` mit Grossbuchstaben. Ein
+     * strtolower() hier würde den Hash von der Speicherform abweichen lassen und
+     * den View-Count auf 0 zwingen. Kanonische Spec: docs/url-normalization.md
      */
     public static function hashUrl(string $url): string
     {
         [$normalized] = self::normalizePageUrl($url);
-        return hash('sha256', strtolower($normalized));
+        return hash('sha256', $normalized);
     }
 
     /**
