@@ -80,10 +80,15 @@ function qVal(PDO $pdo, string $sql, array $params = []): mixed
 $p = [':s' => $startStr, ':e' => $endStr];
 
 // Graceful Degradation: Filter nur anwenden wenn Spalte existiert
-$hasCmsCol        = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'is_cms'")->fetch();
-$hasNewsletterCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'newsletter_batch'")->fetch();
+$hasCmsCol = (bool) $pdo->query("SHOW COLUMNS FROM pageviews LIKE 'is_cms'")->fetch();
 $cmsCondition = $hasCmsCol ? ' AND is_cms = :cms' : '';
 if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
+
+// Generische Titel, die eine Seite/einen Beitrag nicht eindeutig benennen (Overlay noch
+// nicht geladen, Fehler-/Login-Seiten). Werden bei der Titel-Auswahl übersprungen, damit
+// z. B. Beiträge unter /beitrag/… ihren echten Artikel-Titel statt "Willkommen" zeigen.
+$genericTitles    = ['Willkommen - Zurich Sailing', 'Seite nicht gefunden.', 'Bitte anmelden'];
+$genericTitlesSql = implode(',', array_map(fn($t) => $pdo->quote($t), $genericTitles));
 
 // Seitenfilter: $urlFilter ist ein Pfad (z. B. /segelsport/breitensport/zlc).
 // Vergleich auf den reinen Pfad: Domain (CMS-/Event-URLs) und Query-String entfernen –
@@ -119,7 +124,12 @@ $dailyRows = q($pdo,
 // Alle Seiten (nach Pfad gruppiert – Query-String-Varianten zusammenfassen).
 // Eine Query bedient beide Ansichten: Top-Liste und Sitemap-Baum.
 $allPages = q($pdo,
-    "SELECT SUBSTRING_INDEX(url, '?', 1) AS url, MAX(page_title) AS page_title,
+    "SELECT SUBSTRING_INDEX(url, '?', 1) AS url,
+            COALESCE(
+                MAX(CASE WHEN page_title <> '' AND page_title NOT IN ($genericTitlesSql)
+                         THEN page_title END),
+                MAX(page_title)
+            ) AS page_title,
             COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
      FROM pageviews WHERE created_at BETWEEN :s AND :e{$cmsCondition}{$urlCondition}
      GROUP BY SUBSTRING_INDEX(url, '?', 1)", $p);
@@ -131,6 +141,12 @@ $topPages = array_slice($topPages, 0, 15);
 
 // Sitemap: hierarchischer Baum aus den Pfaden (alle Seiten)
 $pageTree = buildPageTree($allPages);
+
+// Beiträge: Clubdesk-Detail-Objekte (Pfad /beitrag/<c>) separat ausgewertet.
+// Entstehen aus $allPages (query-lose synthetische Pfade), daher keine eigene DB-Query nötig.
+$topBeitraege = array_values(array_filter($allPages, fn($r) => str_starts_with($r['url'], '/beitrag/')));
+usort($topBeitraege, fn($a, $b) => (int)$b['views'] <=> (int)$a['views']);
+$topBeitraege = array_slice($topBeitraege, 0, 15);
 
 // Top-Referrer (nur externe)
 $selfFilter = $selfDomain !== '' ? 'AND referrer NOT LIKE :self' : '';
@@ -160,15 +176,6 @@ $outboundLinks = $view === 'cms' ? [] : q($pdo,
     "SELECT event_value, COUNT(*) as clicks FROM events
      WHERE created_at BETWEEN :s AND :e AND event_type = 'outbound_link'{$eventUrlCondition}
      GROUP BY event_value ORDER BY clicks DESC LIMIT 10", $eventParams);
-
-// Newsletter-Batches
-$newsletterBatches = [];
-if ($hasNewsletterCol) {
-    $newsletterBatches = q($pdo,
-        "SELECT newsletter_batch, COUNT(*) as views, COUNT(DISTINCT fingerprint) as visitors
-         FROM pageviews WHERE created_at BETWEEN :s AND :e AND newsletter_batch IS NOT NULL{$cmsCondition}{$urlCondition}
-         GROUP BY newsletter_batch ORDER BY views DESC LIMIT 10", $p);
-}
 
 // Repräsentativer Titel der gefilterten Seite (für das Filter-Banner)
 $filterTitle = '';
@@ -647,20 +654,33 @@ $deviceData   = array_column($devices, 'cnt');
             </div>
         </div>
 
-        <?php if ($hasNewsletterCol && !empty($newsletterBatches)): ?>
-        <!-- Newsletter-Batches -->
+        <?php if (!empty($topBeitraege)): ?>
+        <!-- Beiträge (Clubdesk-Detail-Objekte, separat ausgewertet) -->
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Newsletter-Herkunft</h2>
+                <h2 class="card-title">Beiträge</h2>
             </div>
             <table class="data-table">
                 <thead>
-                    <tr><th>Batch-ID</th><th>Aufrufe</th><th>Besucher</th></tr>
+                    <tr><th>Beitrag</th><th>Aufrufe</th><th>Besucher</th></tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($newsletterBatches as $row): ?>
+                    <?php foreach ($topBeitraege as $row): ?>
+                        <?php
+                            $title = cleanTitle($row['page_title']);
+                            $pageHref = '/?range=' . $range . '&view=' . $view . '&url=' . urlencode($row['url']) . '&scope=exact';
+                        ?>
                         <tr>
-                            <td class="url-path"><?= htmlspecialchars($row['newsletter_batch']) ?></td>
+                            <td>
+                                <a class="page-link" href="<?= htmlspecialchars($pageHref) ?>" title="Auf diesen Beitrag filtern – <?= htmlspecialchars($row['url']) ?>">
+                                <?php if ($title !== ''): ?>
+                                    <span class="url-path"><?= htmlspecialchars($title) ?></span>
+                                    <span class="url-title"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
+                                <?php else: ?>
+                                    <span class="url-path"><?= htmlspecialchars(shortUrl($row['url'])) ?></span>
+                                <?php endif; ?>
+                                </a>
+                            </td>
                             <td class="num"><?= number_format((int)$row['views'], 0, '.', "'") ?></td>
                             <td class="num"><?= number_format((int)$row['visitors'], 0, '.', "'") ?></td>
                         </tr>

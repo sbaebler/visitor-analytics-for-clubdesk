@@ -37,22 +37,31 @@ Aus der URL werden zunächst `host`, `path` und `query` via `parse_url()` extrah
 3. **`/willkommen` auf Root abbilden.**
    `/willkommen` und `/willkommen/` sind dieselbe Seite wie `/`.
 
-4. **Tracking-Parameter aus dem Query-String entfernen**, damit nicht jede Variante als eigene
+4. **Beitrag/Detail-Objekt (`?c=…`) → eigene Seite.**
+   Enthält der Query einen Parameter `c`, der dem Muster `^[A-Za-z]{1,3}\d+$` entspricht
+   (Clubdesk-Detail-Objekt, z. B. `ND…`=News, `ED…`=Events, `CD…`=Kontakte/Clubs), wird die
+   Normalisierung **kurzgeschlossen** und ein synthetischer Pfad `/beitrag/<c>` zurückgegeben.
+   `b` (News-Block) und `s` (Signatur) fliessen bewusst **nicht** in den Schlüssel, ebenso wird
+   der Basispfad verworfen – so zählt derselbe Beitrag über verschiedene Blöcke/Trägerseiten als
+   **eine** Seite. Greift nur für Besucher-URLs (nicht für `app.clubdesk.com`, siehe Regel 1).
+
+5. **Tracking-Parameter aus dem Query-String entfernen**, damit nicht jede Variante als eigene
    Seite zählt:
-   - Clubdesk/Newsletter: `c` (Kontext), `b` (Newsletter-Batch), `s`, `rfb` (Formular-Referenz)
+   - Clubdesk: `c` (falls kein gültiges Detail-Objekt nach Regel 4), `b` (News-Block), `s`
+     (Signatur), `rfb` (Formular-Referenz)
    - Marketing/Klick-Tracker: alle `utm_*` sowie
      `fbclid`, `gclid`, `dclid`, `gclsrc`, `msclkid`, `yclid`, `twclid`, `igshid`, `mc_cid`,
      `mc_eid`, `wsidchk`, `pdata`
    - Verbleibende Parameter bleiben erhalten (werden via `http_build_query()` neu zusammengesetzt).
 
-5. **Ergebnis zusammensetzen:** `path` (Fallback `/`) plus `?query`, falls noch Parameter übrig.
+6. **Ergebnis zusammensetzen:** `path` (Fallback `/`) plus `?query`, falls noch Parameter übrig.
    Der `host` wird separat zurückgegeben (und in `pageviews.host` gespeichert).
 
-### Sonderfall Newsletter-Batch
+### Beispiel Beitrag
 
-Die Newsletter-Batch-ID `?b=…` wird in `collect.php` **vor** der Normalisierung separat aus dem
-rohen Query-String extrahiert und in `pageviews.newsletter_batch` gespeichert (numerisch,
-1–16 Stellen). In der normalisierten URL ist `b` dann (wie oben) entfernt.
+`https://zurich-sailing.ch/?b=1002305&c=ND1000030&s=djEt…` → `/beitrag/ND1000030`.
+Der Beitrags-Titel steht wie bei normalen Seiten in `pageviews.page_title` und wird im Dashboard
+als Label verwendet.
 
 ## Folgen für die gespeicherten Daten
 

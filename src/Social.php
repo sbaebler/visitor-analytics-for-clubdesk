@@ -165,11 +165,20 @@ class Social
             $path = '/';
         }
 
-        // Tracking-Parameter entfernen: Clubdesk/Newsletter (c/b/s/rfb) sowie gängige
-        // Marketing-/Klick-Tracker (utm_*, fbclid, gclid, …) – muss identisch zu
-        // normalizePageUrl() in collect.php bleiben.
+        // Tracking-Parameter entfernen: b (News-Block), s (Signatur), rfb (Formular-Referenz)
+        // sowie gängige Marketing-/Klick-Tracker (utm_*, fbclid, gclid, …).
+        // Ausnahme c: identifiziert einen Clubdesk-Beitrag/Detail-Objekt (ND/ED/CD…) und wird
+        // zu einer eigenen synthetischen Seite /beitrag/<c>. Muss identisch zu
+        // normalizePageUrl() in collect.php bleiben. Kanonische Spec: docs/url-normalization.md
         if ($query !== null) {
             parse_str($query, $params);
+            // Beitrag/Detail-Objekt: c identifiziert den Beitrag eindeutig → eigene Seite.
+            // b (Block) und s (Signatur) fliessen bewusst NICHT in den Schlüssel, damit derselbe
+            // Beitrag über verschiedene Blöcke/Trägerseiten als eine Seite zählt.
+            $c = $params['c'] ?? '';
+            if (is_string($c) && preg_match('/^[A-Za-z]{1,3}\d+$/', $c)) {
+                return ['/beitrag/' . $c, $host];
+            }
             unset($params['c'], $params['b'], $params['s'], $params['rfb']);
             foreach (array_keys($params) as $k) {
                 $lk = strtolower($k);
