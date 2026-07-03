@@ -874,7 +874,7 @@ $deviceData   = array_column($devices, 'cnt');
             <div class="card-header">
                 <h2 class="card-title">Content-Änderungen</h2>
             </div>
-            <p class="hint">
+            <p class="card-desc">
                 <?= number_format($trackedPageCount, 0, '.', "'") ?> überwachte Seite<?= $trackedPageCount === 1 ? '' : 'n' ?> gemäss Sitemap ·
                 Prüfung alle 30 Minuten (<code>cron/check_changes.php</code>)
             </p>

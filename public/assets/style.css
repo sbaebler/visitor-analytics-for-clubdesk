@@ -220,6 +220,19 @@ body {
     color: var(--navy);
 }
 
+/* Beschreibungs-/Metatext direkt unter dem Karten-Header (Block, nicht Tooltip) */
+.card-desc {
+    padding: .75rem 1.25rem;
+    margin: 0;
+    font-size: .8rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+}
+
+.card-desc code {
+    font-size: .78em;
+}
+
 /* ===== Charts ===== */
 .chart-wrap {
     padding: 1rem 1.25rem;
