@@ -63,5 +63,28 @@ return [
         ],
         'retention_days'   => 180,    // Aufbewahrung page_changes-Log
     ],
+
+    // Beitrags-Platzierung: liest von der Website ab, in welchem Clubdesk-Block
+    // und auf welcher Seite ein Beitrag steht (läuft via cron/check_placements.php,
+    // siehe docs/beitrags-analyse.md). Diese Angabe steckt nicht in pageviews –
+    // normalizePageUrl() verwirft Basispfad und Block bewusst.
+    'beitrag_placements' => [
+        'enabled'      => true,
+        // Startseite der überwachten Website – von dort wird die Navigation gelesen
+        // (die Website hat keine Sitemap)
+        'start_url'    => 'https://YOUR-DOMAIN.COM',
+        'timeout'      => 10,     // Sekunden pro Request
+        'delay_ms'     => 200,    // Pause zwischen Seitenabrufen (Ziel-Server schonen)
+        'max_pages'    => 60,     // Sicherheitslimit pro Lauf
+        // "Weitere Einträge"-Vollisten mitlesen. Ohne sie werden nur die aktuell
+        // sichtbaren Einträge erfasst, ältere Beiträge fehlen.
+        'follow_lists' => true,
+        // Optionaler Override der automatisch erkannten Bezeichnung je Block.
+        // Ohne Eintrag: Name = nächste vorangehende Überschrift auf der Seite,
+        // Gruppe = "Startseite" bzw. erstes Pfadsegment.
+        'blocks'       => [
+            // '1002196' => ['name' => 'Startseite – News', 'gruppe' => 'Startseite'],
+        ],
+    ],
 ];
 

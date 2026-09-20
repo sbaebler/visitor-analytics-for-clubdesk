@@ -160,7 +160,27 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
-    echo '<p style="color:green;font-family:monospace">✅ Tabellen erfolgreich erstellt (inkl. Social Widget, Uptime-Monitor, Content-Change-Detection).</p>';
+    // Beitrags-Platzierung – wo auf der Website ein Beitrag eingebettet ist.
+    // Gefüllt von cron/check_placements.php. Spec: docs/beitrags-analyse.md
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS beitrag_placements (
+            id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            c_key         VARCHAR(32)   NOT NULL COMMENT 'Clubdesk-Schlüssel, z.B. ND1000043',
+            block_id      VARCHAR(32)   NOT NULL COMMENT 'Clubdesk-Block (Parameter b) – die Kategorie',
+            page_url      VARCHAR(2048) NOT NULL COMMENT 'Normalisierte Trägerseite, Format wie pageviews.url',
+            block_label   VARCHAR(255)      NULL,
+            published_at  DATE              NULL COMMENT 'Aus <time> der Kachel',
+            author        VARCHAR(128)      NULL,
+            source        ENUM('scrape','referrer') NOT NULL DEFAULT 'scrape',
+            first_seen_at DATETIME      NOT NULL,
+            last_seen_at  DATETIME      NOT NULL,
+            UNIQUE KEY uniq_placement (c_key, block_id, page_url(180)),
+            INDEX idx_c_key (c_key),
+            INDEX idx_block (block_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    echo '<p style="color:green;font-family:monospace">✅ Tabellen erfolgreich erstellt (inkl. Social Widget, Uptime-Monitor, Content-Change-Detection, Beitrags-Platzierung).</p>';
     echo '<p style="font-family:monospace">⚠️ Lösche oder schütze jetzt diese Datei: <code>setup/install.php</code></p>';
 } catch (PDOException $e) {
     echo '<p style="color:red;font-family:monospace">Fehler: ' . htmlspecialchars($e->getMessage()) . '</p>';

@@ -19,6 +19,7 @@ config/
 cron/
   check_uptime.php      Uptime-Monitor, läuft alle 15 Min. via Cron auf Cyon
   check_changes.php     ← NEU: Content-Change-Detection, läuft alle 30 Min. via Cron auf Cyon
+  check_placements.php  ← NEU: Beitrags-Platzierung, läuft täglich via Cron auf Cyon
 public/                 Document Root der Subdomain
   .htaccess             Security-Header, Caching, setup/-Schutz
   collect.php           Tracking-Endpunkt (POST von tracker.js)
@@ -40,6 +41,7 @@ src/
   Auth.php              Session-Auth für Admin-Dashboard
   BeitragStats.php      ← NEU: Beitrags-Auswertung (rein lesend, keine Migration)
   Database.php          PDO-Singleton
+  PlacementMonitor.php  ← NEU: liest von der Website, wo ein Beitrag eingebettet ist
   Social.php            ← NEU: Like-Logik, URL-Hashing, Stats
   SitemapMonitor.php    ← NEU: Sitemap-Parsing, Content-Diff, Change-Detection
 ```
@@ -69,6 +71,7 @@ social_likes   – Wer hat welche URL geliked (url_hash + ip_hash, kein PII)
 social_stats   – Aggregat-Cache: like_count pro url_hash
 tracked_pages  – Content-Change-Detection: aktueller Content-Hash pro überwachter Seite (Vergleichs-Baseline)
 page_changes   – Content-Change-Detection: Log jeder erkannten Content-Änderung (inkl. Diff-Excerpt)
+beitrag_placements – Wo ein Beitrag auf der Website steht (Block + Trägerseite), inkl. Publikationsdatum
 ```
 
 View-Counts im Widget kommen aus `pageviews` (kein Duplikat).
@@ -126,6 +129,12 @@ nicht statisch im Template gesetzt.
 **Neue DB-Spalte in pageviews:** `setup/schema.sql` (kanonisches Voll-Schema, für neue Installationen) **und** `setup/install.php` (CREATE TABLE, CLI-Helfer) synchron halten + neue `setup/migrate_*.sql` Datei für bestehende Installationen + `collect.php` anpassen.
 
 **Admin-Dashboard erweitern:** Queries in `public/index.php`, HTML darunter. CSS-Klassen aus `assets/style.css` verwenden.
+
+**Beitrags-Platzierung anpassen:** `src/PlacementMonitor.php` (Crawling, Kachel-Parsing),
+`cron/check_placements.php` (täglicher Einstiegspunkt), Config unter
+`config['beitrag_placements']`. Die Kategorie ist der Clubdesk-**Block** (`b`), nicht die Seite –
+ein Block kann auf mehreren Seiten hängen. Mehrfach platzierte Beiträge fallen aus dem
+Ortsvergleich, weil `pageviews` pro Beitrag nur einen Zähler kennt. Spec: `docs/beitrags-analyse.md`
 
 **Beitrags-Auswertung erweitern:** `src/BeitragStats.php` (alle Queries + Klassifikation),
 `public/beitraege.php` (nur Darstellung), Charts in `assets/dashboard.js` unter

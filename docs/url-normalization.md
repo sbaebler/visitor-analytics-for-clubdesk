@@ -41,6 +41,16 @@ Aus der URL werden zunächst `host`, `path` und `query` via `parse_url()` extrah
    Enthält der Query einen Parameter `c`, der dem Muster `^[A-Za-z]{1,3}\d+$` entspricht
    (Clubdesk-Detail-Objekt, z. B. `ND…`=News, `ED…`=Events, `CD…`=Kontakte/Clubs), wird die
    Normalisierung **kurzgeschlossen** und ein synthetischer Pfad `/beitrag/<c>` zurückgegeben.
+
+   `c` kann eine **Kette** sein: die Vollisten ("Weitere Einträge") liefern
+   `c=NL,ND1000043` – erst der Listen-Kontext (`NL`/`EL`, ohne Ziffern), dann der Beitrag.
+   Massgeblich ist das **letzte Glied mit Ziffern**. Ein reines `c=NL` ist nur die Liste
+   und ergibt keinen Beitrag.
+
+   > Bis September 2026 prüfte die Regel den Wert nur als Ganzes. Beiträge, die über eine
+   > Vollliste geöffnet wurden, fielen deshalb durch, `c` wurde verworfen, und der Aufruf
+   > landete auf der Trägerseite – meist der Startseite. Die Beitragszahlen waren dadurch
+   > zu tief, die Startseite zu hoch.
    `b` (News-Block) und `s` (Signatur) fliessen bewusst **nicht** in den Schlüssel, ebenso wird
    der Basispfad verworfen – so zählt derselbe Beitrag über verschiedene Blöcke/Trägerseiten als
    **eine** Seite. Greift nur für Besucher-URLs (nicht für `app.clubdesk.com`, siehe Regel 1).

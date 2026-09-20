@@ -97,6 +97,10 @@
   setInterval(function () {
     var currentUrl = window.location.href.split('#')[0];
     if (currentUrl === lastTrackedUrl) return;
+    // Vorherige URL sichern, BEVOR lastTrackedUrl weiterrückt. Der setTimeout-Callback
+    // unten läuft erst 1000 ms später und würde sonst die bereits überschriebene äussere
+    // Variable lesen – der Beitrag meldete sich dann selbst als Referrer.
+    var previousUrl = lastTrackedUrl;
     lastTrackedUrl = currentUrl;
 
     if (hasBeitragParam(currentUrl)) {
@@ -112,7 +116,7 @@
           view_id: newViewId,
           url    : currentUrl,
           title  : extractBeitragTitle(),
-          ref    : lastTrackedUrl,
+          ref    : previousUrl,
           device : getDevice(),
           width  : screen.width,
           lang   : navigator.language,

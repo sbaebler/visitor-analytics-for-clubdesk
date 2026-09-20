@@ -24,6 +24,9 @@ final class BeitragStats
         'mail'   => 'E-Mail (Webmail)',
         'extern' => 'Andere Website',
         'direkt' => 'Direkt / unbekannt',
+        // Messfehler-Klasse, siehe origins(): Aufrufe, die sich selbst als
+        // Referrer melden. Bewusst sichtbar statt stillschweigend als "intern".
+        'nicht_erfasst' => 'Herkunft nicht erfasst',
     ];
 
     /**
@@ -269,6 +272,236 @@ final class BeitragStats
     }
 
     // -------------------------------------------------------------------------
+    // Platzierung
+    // -------------------------------------------------------------------------
+
+    /**
+     * Platzierungen je Beitrag aus beitrag_placements.
+     *
+     * Bewusst eine eigene Query statt eines JOIN in overview(): ein Beitrag kann
+     * MEHRFACH platziert sein (auf der echten Website z. B. drei Termine, die
+     * gleichzeitig auf der Startseite und unter /botschafter/vorstand hängen).
+     * Ein JOIN würde die Zeilen vervielfachen und damit COUNT(*) – also die
+     * Aufrufzahlen – verfälschen.
+     *
+     * @return array<string, list<array<string,mixed>>> c_key => Platzierungen
+     */
+    public static function placements(PDO $pdo): array
+    {
+        if (!$pdo->query("SHOW TABLES LIKE 'beitrag_placements'")->fetch()) {
+            return [];
+        }
+
+        $stmt = $pdo->query(
+            "SELECT c_key, block_id, page_url, block_label, published_at, author, source
+               FROM beitrag_placements
+              ORDER BY source ASC, block_id ASC"   // 'referrer' < 'scrape': Scrape gewinnt beim Label
+        );
+
+        $out = [];
+        foreach ($stmt !== false ? $stmt->fetchAll() : [] as $r) {
+            $out[(string) $r['c_key']][] = [
+                'block_id'     => (string) $r['block_id'],
+                'page_url'     => (string) $r['page_url'],
+                'block_label'  => $r['block_label'] !== null ? (string) $r['block_label'] : null,
+                'published_at' => $r['published_at'] !== null ? (string) $r['published_at'] : null,
+                'author'       => $r['author'] !== null ? (string) $r['author'] : null,
+                'source'       => (string) $r['source'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Platzierung an die overview()-Zeilen hängen.
+     *
+     * `block_config` erlaubt je Block einen Override von Name und Gruppe
+     * (config['beitrag_placements']['blocks']); ohne Eintrag greift die
+     * automatisch erkannte Überschrift bzw. das erste Pfadsegment.
+     *
+     * `placement_count` zählt die VERSCHIEDENEN Blöcke. Das ist die für die
+     * Auswertung entscheidende Zahl: steht ein Beitrag in mehreren Blöcken,
+     * lassen sich seine Aufrufe keiner einzelnen Platzierung zuordnen, weil
+     * pageviews pro Beitrag nur einen Zähler kennt.
+     *
+     * @param  list<array<string,mixed>>                     $rows
+     * @param  array<string, list<array<string,mixed>>>      $placements
+     * @param  array<string, array{name?:string,gruppe?:string}> $blockConfig
+     * @return list<array<string,mixed>>
+     */
+    public static function withPlacements(array $rows, array $placements, array $blockConfig = []): array
+    {
+        foreach ($rows as &$r) {
+            $own = $placements[$r['c_key']] ?? [];
+
+            $blocks = [];
+            $pages  = [];
+            $pub    = null;
+            $author = null;
+            foreach ($own as $p) {
+                $blocks[$p['block_id']] = $p;
+                $pages[$p['page_url']]  = true;
+                $pub    ??= $p['published_at'];
+                $author ??= $p['author'];
+            }
+
+            $r['placement_count'] = count($blocks);
+            $r['placement_pages'] = array_keys($pages);
+            $r['published_at']    = $pub;
+            $r['author']          = $author;
+
+            if ($blocks === []) {
+                $r['block_id']    = null;
+                $r['block_label'] = 'nicht zugeordnet';
+                $r['gruppe']      = 'nicht zugeordnet';
+            } else {
+                $first = reset($blocks);
+                $bid   = (string) array_key_first($blocks);
+                $cfg   = $blockConfig[$bid] ?? [];
+
+                $r['block_id']    = $bid;
+                $r['block_label'] = $cfg['name'] ?? ($first['block_label'] ?? ('Block ' . $bid));
+                $r['gruppe']      = $cfg['gruppe'] ?? self::groupForPage($first['page_url']);
+            }
+
+            // Tage zwischen Veröffentlichung und erstem gemessenen Aufruf.
+            // Negativ wäre unmöglich; null, wenn kein echtes Datum vorliegt.
+            $r['pickup_days'] = null;
+            if ($pub !== null) {
+                $diff = (new DateTimeImmutable(substr($r['first_at'], 0, 10)))
+                    ->diff(new DateTimeImmutable($pub))->days;
+                $r['pickup_days'] = $pub <= substr($r['first_at'], 0, 10) ? (int) $diff : null;
+            }
+        }
+        unset($r);
+        return $rows;
+    }
+
+    /**
+     * Vergleich je Block – die Kernauswertung zur Frage, ob der Ort wirkt.
+     *
+     * Berücksichtigt NUR eindeutig platzierte Beiträge (`placement_count === 1`).
+     * Bei mehrfach platzierten Beiträgen kennt pageviews nur einen Zähler; sie
+     * einem der Blöcke zuzuschlagen oder in beide zu zählen wäre in beiden
+     * Fällen falsch. Wie viele dadurch wegfallen, gibt `excluded` zurück.
+     *
+     * @param  list<array<string,mixed>> $rows
+     * @return array{blocks: list<array<string,mixed>>, excluded: int}
+     */
+    public static function byPlacement(array $rows): array
+    {
+        $eindeutig = array_values(array_filter($rows, static fn($r) => ($r['placement_count'] ?? 0) === 1));
+        $excluded  = count(array_filter($rows, static fn($r) => ($r['placement_count'] ?? 0) > 1));
+
+        $g = [];
+        foreach ($eindeutig as $r) {
+            $g[(string) $r['block_id']][] = $r;
+        }
+
+        $out = [];
+        foreach ($g as $bid => $items) {
+            $mature = array_values(array_filter($items, static fn($r) => $r['v7_complete']));
+            $v7     = array_map(static fn($r) => (float) $r['v7'], $mature);
+            $durs   = array_values(array_filter(
+                array_map(static fn($r) => $r['avg_duration'], $items),
+                static fn($d) => $d !== null
+            ));
+            $views  = array_sum(array_map(static fn($r) => (int) $r['views'], $items));
+            $likes  = array_sum(array_map(static fn($r) => (int) $r['likes'], $items));
+
+            $out[] = [
+                'block_id'      => $bid,
+                'label'         => $items[0]['block_label'],
+                'gruppe'        => $items[0]['gruppe'],
+                'pages'         => $items[0]['placement_pages'],
+                'n'             => count($items),
+                'n_mature'      => count($mature),
+                'views'         => $views,
+                'median_v7'     => $v7 !== [] ? self::median($v7) : null,
+                'avg_duration'  => $durs !== [] ? array_sum($durs) / count($durs) : null,
+                'likes_per_100' => $views >= self::MIN_VIEWS_FOR_RATE ? $likes / $views * 100 : null,
+                'thin'          => count($mature) < self::MIN_GROUP,
+            ];
+        }
+
+        usort($out, static function ($a, $b) {
+            return ($b['median_v7'] ?? -1) <=> ($a['median_v7'] ?? -1);
+        });
+
+        return ['blocks' => $out, 'excluded' => $excluded];
+    }
+
+    /**
+     * Aggregation auf Gruppen (Startseite gegen Unterseiten).
+     * Gleiche Einschränkung wie byPlacement(): nur eindeutig platzierte Beiträge.
+     *
+     * @param  list<array<string,mixed>> $rows
+     * @return list<array<string,mixed>>
+     */
+    public static function byGroup(array $rows): array
+    {
+        $g = [];
+        foreach ($rows as $r) {
+            if (($r['placement_count'] ?? 0) !== 1) continue;
+            $g[(string) $r['gruppe']][] = $r;
+        }
+
+        $out = [];
+        foreach ($g as $gruppe => $items) {
+            $mature = array_values(array_filter($items, static fn($r) => $r['v7_complete']));
+            $v7     = array_map(static fn($r) => (float) $r['v7'], $mature);
+
+            $out[] = [
+                'gruppe'    => $gruppe,
+                'n'         => count($items),
+                'n_mature'  => count($mature),
+                'views'     => array_sum(array_map(static fn($r) => (int) $r['views'], $items)),
+                'median_v7' => $v7 !== [] ? self::median($v7) : null,
+                'thin'      => count($mature) < self::MIN_GROUP,
+            ];
+        }
+
+        usort($out, static fn($a, $b) => ($b['median_v7'] ?? -1) <=> ($a['median_v7'] ?? -1));
+        return $out;
+    }
+
+    /**
+     * Dieselbe Meldung an zwei Orten: Beiträge mit gleichem Titel, aber
+     * verschiedenen Schlüsseln und verschiedenen Blöcken.
+     *
+     * Clubdesk erzwingt je Liste ein eigenes Objekt – wird eine Meldung in zwei
+     * Listen gestellt, entstehen zwei Schlüssel mit je eigenem Zähler. Das ist
+     * die sauberste Antwort auf die Ausgangsfrage, die diese Daten hergeben:
+     * der Inhalt ist konstant, nur der Ort variiert.
+     *
+     * @param  list<array<string,mixed>> $rows
+     * @return list<array{title:string, varianten:list<array<string,mixed>>}>
+     */
+    public static function duplicateStories(array $rows): array
+    {
+        $byTitle = [];
+        foreach ($rows as $r) {
+            $t = mb_strtolower(trim((string) $r['page_title']), 'UTF-8');
+            if ($t === '') continue;
+            $byTitle[$t][] = $r;
+        }
+
+        $out = [];
+        foreach ($byTitle as $items) {
+            if (count($items) < 2) continue;
+            // Nur echte Ortsvergleiche: verschiedene Blöcke, beide zugeordnet
+            $blocks = array_unique(array_filter(array_map(static fn($r) => $r['block_id'] ?? null, $items)));
+            if (count($blocks) < 2) continue;
+
+            usort($items, static fn($a, $b) => (int) $b['views'] <=> (int) $a['views']);
+            $out[] = ['title' => (string) $items[0]['page_title'], 'varianten' => $items];
+        }
+
+        usort($out, static fn($a, $b) => (int) $b['varianten'][0]['views'] <=> (int) $a['varianten'][0]['views']);
+        return $out;
+    }
+
+    // -------------------------------------------------------------------------
     // Muster (a): zeitlich
     // -------------------------------------------------------------------------
 
@@ -279,18 +512,29 @@ final class BeitragStats
      * Nur reife Beiträge (v7_complete). Dünne Gruppen werden markiert, nicht
      * entfernt: die UI graut sie aus, statt sie stillschweigend zu verschweigen.
      *
+     * Als Tag zählt das ECHTE Publikationsdatum aus der Beitragskachel, sofern
+     * der Platzierungs-Monitor es erfasst hat – die Frage lautet ja "an welchem
+     * Tag soll ich veröffentlichen". Fehlt es, greift die Erstsichtung als
+     * Notlösung; wie oft das passiert, steht in `fallback` und gehört ins UI.
+     *
      * @param  list<array<string,mixed>> $rows
-     * @return list<array{dow:int,label:string,n:int,avg_v7:float,median_v7:float,thin:bool}>
+     * @return array{tage:list<array<string,mixed>>, fallback:int}
      */
     public static function weekdayPerformance(array $rows): array
     {
         $labels  = [1 => 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
                          'Freitag', 'Samstag', 'Sonntag'];
-        $buckets = array_fill_keys(range(1, 7), []);
+        $buckets  = array_fill_keys(range(1, 7), []);
+        $fallback = 0;
 
         foreach ($rows as $r) {
             if (!$r['v7_complete']) continue;
-            $dow = (int) (new DateTimeImmutable($r['first_at']))->format('N');
+            $datum = $r['published_at'] ?? null;
+            if ($datum === null) {
+                $datum = $r['first_at'];
+                $fallback++;
+            }
+            $dow = (int) (new DateTimeImmutable($datum))->format('N');
             $buckets[$dow][] = (float) $r['v7'];
         }
 
@@ -306,7 +550,7 @@ final class BeitragStats
                 'thin'      => $n < self::MIN_GROUP,
             ];
         }
-        return $out;
+        return ['tage' => $out, 'fallback' => $fallback];
     }
 
     /**
@@ -552,17 +796,28 @@ final class BeitragStats
                          SUBSTRING_INDEX(REGEXP_REPLACE(COALESCE(referrer, ''), '^https?://', ''), '/', 1),
                          ':', 1))";
 
+        // Selbstreferenz erkennen: bis zum Fix in tracker.js meldete ein
+        // client-seitig geöffneter Beitrag seine EIGENE rohe URL als Referrer
+        // (die Variable lastTrackedUrl war beim verzögerten Senden bereits
+        // weitergerückt). Solche Zeilen sind keine interne Navigation, sondern
+        // ein Messfehler – sie als "intern" zu zählen würde die Karte falsch
+        // machen. Erkennbar am c=-Parameter, den ein echter Referrer nicht trägt.
+        $selfRefExpr = "CASE WHEN COALESCE(referrer, '') REGEXP '[?&]c=[A-Za-z]{1,3}[0-9]+'
+                             THEN 1 ELSE 0 END";
+
         $stmt = $pdo->query(
-            "SELECT {$hostExpr} AS ref_host, COUNT(*) AS views
+            "SELECT {$hostExpr} AS ref_host, {$selfRefExpr} AS self_ref, COUNT(*) AS views
                FROM pageviews
               WHERE " . self::BASE . "
-              GROUP BY {$hostExpr}"
+              GROUP BY {$hostExpr}, {$selfRefExpr}"
         );
 
         $classes = array_fill_keys(array_keys(self::REF_LABELS), 0);
         $total   = 0;
         foreach ($stmt !== false ? $stmt->fetchAll() : [] as $r) {
-            $class = self::classifyReferrerHost((string) $r['ref_host'], $selfDomain);
+            $class = ((int) $r['self_ref'] === 1)
+                ? 'nicht_erfasst'
+                : self::classifyReferrerHost((string) $r['ref_host'], $selfDomain);
             $classes[$class] += (int) $r['views'];
             $total += (int) $r['views'];
         }
@@ -659,6 +914,20 @@ final class BeitragStats
     // -------------------------------------------------------------------------
     // Helfer
     // -------------------------------------------------------------------------
+
+    /**
+     * Gruppe für den Vergleich "Startseite gegen Unterseiten".
+     * '/' → "Startseite", sonst das erste Pfadsegment. Reine Anzeige-Logik,
+     * deshalb hier und nicht im Crawler – ein Override je Block ist in
+     * config['beitrag_placements']['blocks'] möglich.
+     */
+    public static function groupForPage(string $pageUrl): string
+    {
+        $path = '/' . ltrim((string) (parse_url($pageUrl, PHP_URL_PATH) ?: $pageUrl), '/');
+        if ($path === '/' || $path === '//') return 'Startseite';
+        $seg = explode('/', trim($path, '/'))[0] ?? '';
+        return $seg !== '' ? mb_convert_case($seg, MB_CASE_TITLE, 'UTF-8') : 'Startseite';
+    }
 
     /** Typpräfix aus dem Clubdesk-Schlüssel, z. B. 'ND1000030' → 'ND'. */
     public static function typeOf(string $cKey): string

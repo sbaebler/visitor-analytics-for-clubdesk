@@ -132,7 +132,7 @@ class SitemapMonitor
         $success    = curl_exec($ch);
         $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErrno  = curl_errno($ch);
-        curl_close($ch);
+        // Kein curl_close(): seit PHP 8.0 wirkungslos, seit 8.5 deprecated.
 
         if ($curlErrno !== 0 || $success === false || $httpStatus < 200 || $httpStatus >= 300) {
             return null;
@@ -241,7 +241,8 @@ class SitemapMonitor
         $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
         $curlErrno   = curl_errno($ch);
         $curlError   = curl_error($ch);
-        curl_close($ch);
+        // Kein curl_close(): seit PHP 8.0 wirkungslos, seit 8.5 deprecated –
+        // das Handle wird beim Verlassen der Methode freigegeben.
 
         if ($curlErrno !== 0 || $success === false) {
             return ['html' => null, 'http_status' => $httpStatus ?: null, 'error' => mb_substr($curlError, 0, 255)];

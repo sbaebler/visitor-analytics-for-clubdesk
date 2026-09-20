@@ -26,11 +26,17 @@ if (!in_array($sort, ['v7', 'views', 'recent', 'duration', 'likes', 'visitors'],
 }
 $dir = ($_GET['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
 
-$typeFilter = (string) ($_GET['type'] ?? 'all');
-$termFilter = trim((string) ($_GET['q'] ?? ''));
+$typeFilter  = (string) ($_GET['type'] ?? 'all');
+$termFilter  = trim((string) ($_GET['q'] ?? ''));
+$blockFilter = (string) ($_GET['block'] ?? 'all');
 
 // --- Daten ---
-$all = BeitragStats::enrich(BeitragStats::overview($pdo), BeitragStats::likes($pdo));
+$blockConfig = $config['beitrag_placements']['blocks'] ?? [];
+$all = BeitragStats::withPlacements(
+    BeitragStats::enrich(BeitragStats::overview($pdo), BeitragStats::likes($pdo)),
+    BeitragStats::placements($pdo),
+    $blockConfig
+);
 
 $types = array_values(array_unique(array_column($all, 'c_type')));
 sort($types);
@@ -38,18 +44,38 @@ if (!in_array($typeFilter, $types, true)) $typeFilter = 'all';
 
 // Muster-Auswertungen laufen immer auf ALLEN Beiträgen – ein Filter in der
 // Tabelle darf die Grundgesamtheit der Muster nicht verändern.
-$weekday   = BeitragStats::weekdayPerformance($all);
-$byType    = BeitragStats::byType($all);
-$keywords  = BeitragStats::keywordStats($all);
-$lifecycle = BeitragStats::lifecycle($pdo);
-$origins   = BeitragStats::origins($pdo, $selfDomain);
-$devices   = BeitragStats::devices($pdo);
-$heat      = BeitragStats::hourWeekday($pdo);
+$weekdayData = BeitragStats::weekdayPerformance($all);
+$weekday     = $weekdayData['tage'];
+$byType      = BeitragStats::byType($all);
+$keywords    = BeitragStats::keywordStats($all);
+$lifecycle   = BeitragStats::lifecycle($pdo);
+$origins     = BeitragStats::origins($pdo, $selfDomain);
+$devices     = BeitragStats::devices($pdo);
+$heat        = BeitragStats::hourWeekday($pdo);
+
+$placementData = BeitragStats::byPlacement($all);
+$byPlacement   = $placementData['blocks'];
+$byGroup       = BeitragStats::byGroup($all);
+$duplicates    = BeitragStats::duplicateStories($all);
+
+$hasPlacements = array_sum(array_map(static fn($r) => $r['placement_count'], $all)) > 0;
+$unassigned    = count(array_filter($all, static fn($r) => $r['placement_count'] === 0));
+
+// Blocknamen für den Tab-Filter (nur zugeordnete Beiträge)
+$blockNames = [];
+foreach ($all as $r) {
+    if ($r['block_id'] !== null) $blockNames[$r['block_id']] = $r['block_label'];
+}
+asort($blockNames);
+if (!array_key_exists($blockFilter, $blockNames)) $blockFilter = 'all';
 
 // --- Tabelle: filtern und sortieren ---
 $rows = $all;
 if ($typeFilter !== 'all') {
     $rows = array_values(array_filter($rows, fn($r) => $r['c_type'] === $typeFilter));
+}
+if ($blockFilter !== 'all') {
+    $rows = array_values(array_filter($rows, fn($r) => $r['block_id'] === $blockFilter));
 }
 if ($termFilter !== '') {
     $needle = mb_strtolower($termFilter, 'UTF-8');
@@ -133,9 +159,9 @@ $refChart = [
 $devLabels = ['desktop' => 'Desktop', 'mobile' => 'Mobil', 'tablet' => 'Tablet'];
 
 /** Link auf dieselbe Seite mit geänderten Parametern. */
-$link = function (array $overrides) use ($sort, $dir, $typeFilter, $termFilter): string {
+$link = function (array $overrides) use ($sort, $dir, $typeFilter, $termFilter, $blockFilter): string {
     $p = array_merge(
-        ['sort' => $sort, 'dir' => $dir, 'type' => $typeFilter, 'q' => $termFilter],
+        ['sort' => $sort, 'dir' => $dir, 'type' => $typeFilter, 'q' => $termFilter, 'block' => $blockFilter],
         $overrides
     );
     $p = array_filter($p, fn($v) => $v !== '' && $v !== 'all');
@@ -237,8 +263,13 @@ $sortHead = function (string $key, string $label, string $title) use ($sort, $di
                             „<?= htmlspecialchars($termFilter) ?>“ ✕
                         </a>
                     <?php else: ?>
-                        <a class="tab-btn <?= $typeFilter === 'all' ? 'active' : '' ?>"
-                           href="<?= htmlspecialchars($link(['type' => 'all'])) ?>">Alle</a>
+                        <a class="tab-btn <?= $typeFilter === 'all' && $blockFilter === 'all' ? 'active' : '' ?>"
+                           href="<?= htmlspecialchars($link(['type' => 'all', 'block' => 'all'])) ?>">Alle</a>
+                        <?php foreach ($blockNames as $bid => $bname): ?>
+                            <a class="tab-btn <?= $blockFilter === (string) $bid ? 'active' : '' ?>"
+                               href="<?= htmlspecialchars($link(['block' => (string) $bid, 'type' => 'all'])) ?>"
+                               title="Nur Beiträge aus diesem Block"><?= htmlspecialchars($bname) ?></a>
+                        <?php endforeach; ?>
                         <?php foreach ($types as $t): ?>
                             <a class="tab-btn <?= $typeFilter === $t ? 'active' : '' ?>"
                                href="<?= htmlspecialchars($link(['type' => $t])) ?>">
@@ -258,7 +289,7 @@ $sortHead = function (string $key, string $label, string $title) use ($sort, $di
                 <thead>
                     <tr>
                         <th>Beitrag</th>
-                        <th><?= $sortHead('recent', 'Erstsichtung', 'Nach erstem gemessenem Aufruf sortieren') ?></th>
+                        <th><?= $sortHead('recent', 'Veröffentlicht', 'Nach Veröffentlichung sortieren (Erstsichtung, wo kein echtes Datum vorliegt)') ?></th>
                         <th><?= $sortHead('v7', 'Erste 7 Tage', 'Aufrufe in den ersten 7 Tagen – fairer Vergleich') ?></th>
                         <th><?= $sortHead('views', 'Aufrufe', 'Aufrufe über die gesamte Laufzeit') ?></th>
                         <th><?= $sortHead('visitors', 'Besuchertage', 'Besucherkennung wechselt täglich – siehe Methodik') ?></th>
@@ -281,13 +312,23 @@ $sortHead = function (string $key, string $label, string $title) use ($sort, $di
                                     </span>
                                     <span class="url-title">
                                         <?= htmlspecialchars(BeitragStats::typeLabel($r['c_type'])) ?> ·
-                                        <?= htmlspecialchars($r['url']) ?>
+                                        <?= htmlspecialchars($r['block_label']) ?><?php if ($r['placement_count'] > 1): ?>
+                                            <span class="hint" title="Steht in <?= (int) $r['placement_count'] ?> Blöcken – die Aufrufe lassen sich keinem einzelnen zuordnen">+<?= (int) $r['placement_count'] - 1 ?></span>
+                                        <?php endif; ?>
                                     </span>
                                 </a>
                             </td>
                             <td>
-                                <span class="url-path"><?= htmlspecialchars(date('j.n.Y', strtotime($r['first_at']))) ?></span>
-                                <span class="url-title">vor <?= BeitragStats::nf((float) $r['age_days']) ?> Tagen</span>
+                                <?php if ($r['published_at'] !== null): ?>
+                                    <span class="url-path"><?= htmlspecialchars(date('j.n.Y', strtotime($r['published_at']))) ?></span>
+                                    <span class="url-title">
+                                        <?= htmlspecialchars(['','Mo','Di','Mi','Do','Fr','Sa','So'][(int) date('N', strtotime($r['published_at']))]) ?>,
+                                        vor <?= BeitragStats::nf((float) $r['age_days']) ?> Tagen
+                                    </span>
+                                <?php else: ?>
+                                    <span class="url-path"><?= htmlspecialchars(date('j.n.Y', strtotime($r['first_at']))) ?></span>
+                                    <span class="url-title hint" title="Kein Veröffentlichungsdatum erfasst – gezeigt wird der erste gemessene Aufruf">Erstsichtung</span>
+                                <?php endif; ?>
                             </td>
                             <td class="num">
                                 <?php if ($r['v7_complete']): ?>
@@ -316,6 +357,123 @@ $sortHead = function (string $key, string $label, string $title) use ($sort, $di
             <?php endif; ?>
         </div>
 
+        <!-- ================= Platzierung ================= -->
+        <?php if ($hasPlacements): ?>
+        <div class="card">
+            <div class="card-header"><h2 class="card-title">Platzierung im Vergleich</h2></div>
+            <p class="card-desc">
+                Wo ein Beitrag auf der Website eingebettet ist – ausgelesen von der Website
+                selbst, weil die Platzierung nicht mitgetrackt wird.
+                <?php if ($placementData['excluded'] > 0): ?>
+                    <strong><?= BeitragStats::nf((float) $placementData['excluded']) ?> Beiträge</strong>
+                    stehen an mehreren Orten und fehlen hier: ihre Aufrufe zählen nur einmal und
+                    lassen sich keinem einzelnen Ort zuordnen.
+                <?php endif; ?>
+                <?php if ($unassigned > 0): ?>
+                    <?= BeitragStats::nf((float) $unassigned) ?> weitere sind aus keiner Liste mehr
+                    erreichbar und damit nicht zugeordnet.
+                <?php endif; ?>
+            </p>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Platzierung</th><th>Seite</th><th>Beiträge</th><th>Median 7 T.</th><th>Aufrufe</th><th>Ø Zeit</th></tr>
+                </thead>
+                <tbody>
+                <?php if (empty($byPlacement)): ?>
+                    <tr><td colspan="6" class="empty">Noch keine eindeutig platzierten Beiträge</td></tr>
+                <?php endif; ?>
+                <?php foreach ($byPlacement as $b): ?>
+                    <tr<?= $b['thin'] ? ' class="row-thin"' : '' ?>>
+                        <td><span class="url-path"><?= htmlspecialchars((string) $b['label']) ?></span>
+                            <span class="url-title"><?= htmlspecialchars((string) $b['gruppe']) ?></span></td>
+                        <td><span class="url-title"><?= htmlspecialchars(implode(', ', $b['pages'])) ?></span></td>
+                        <td class="num"><?= BeitragStats::nf((float) $b['n']) ?></td>
+                        <td class="num">
+                            <?php if ($b['thin'] || $b['median_v7'] === null): ?>
+                                <span class="hint" title="Erst <?= (int) $b['n_mature'] ?> vergleichbare Beiträge an diesem Ort">–</span>
+                            <?php else: ?>
+                                <?= BeitragStats::nf($b['median_v7'], 1) ?>
+                            <?php endif; ?>
+                        </td>
+                        <td class="num"><?= BeitragStats::nf((float) $b['views']) ?></td>
+                        <td class="num"><?= $b['avg_duration'] !== null
+                            ? htmlspecialchars(BeitragStats::formatDuration($b['avg_duration'])) : '–' ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="two-col">
+            <div class="card">
+                <div class="card-header"><h2 class="card-title">Startseite gegen Unterseiten</h2></div>
+                <p class="card-desc">
+                    Dieselben Beiträge, nur gröber gruppiert. Aussagekräftig erst ab
+                    <?= BeitragStats::MIN_GROUP ?> vergleichbaren Beiträgen je Gruppe.
+                </p>
+                <table class="data-table">
+                    <thead><tr><th>Gruppe</th><th>Beiträge</th><th>Median 7 T.</th><th>Aufrufe</th></tr></thead>
+                    <tbody>
+                    <?php if (empty($byGroup)): ?>
+                        <tr><td colspan="4" class="empty">Noch keine Daten</td></tr>
+                    <?php endif; ?>
+                    <?php foreach ($byGroup as $g): ?>
+                        <tr<?= $g['thin'] ? ' class="row-thin"' : '' ?>>
+                            <td><span class="url-path"><?= htmlspecialchars((string) $g['gruppe']) ?></span></td>
+                            <td class="num"><?= BeitragStats::nf((float) $g['n']) ?></td>
+                            <td class="num">
+                                <?php if ($g['thin'] || $g['median_v7'] === null): ?>
+                                    <span class="hint" title="Erst <?= (int) $g['n_mature'] ?> vergleichbare Beiträge">–</span>
+                                <?php else: ?>
+                                    <?= BeitragStats::nf($g['median_v7'], 1) ?>
+                                <?php endif; ?>
+                            </td>
+                            <td class="num"><?= BeitragStats::nf((float) $g['views']) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h2 class="card-title">Dieselbe Meldung, zwei Plätze</h2></div>
+                <p class="card-desc">
+                    Wird eine Meldung in zwei Listen gestellt, legt Clubdesk zwei Objekte mit je
+                    eigenem Zähler an. Der Inhalt ist identisch, nur der Ort verschieden – das ist
+                    der direkteste Hinweis auf die Wirkung der Platzierung, den diese Daten hergeben.
+                </p>
+                <table class="data-table">
+                    <thead><tr><th>Meldung / Ort</th><th>Aufrufe</th><th>7 Tage</th></tr></thead>
+                    <tbody>
+                    <?php if (empty($duplicates)): ?>
+                        <tr><td colspan="3" class="empty">Keine Meldung mehrfach publiziert</td></tr>
+                    <?php endif; ?>
+                    <?php foreach (array_slice($duplicates, 0, 8) as $d): ?>
+                        <?php foreach ($d['varianten'] as $i => $v): ?>
+                            <tr>
+                                <td>
+                                    <?php if ($i === 0): ?>
+                                        <span class="url-path"><?= htmlspecialchars($d['title']) ?></span>
+                                    <?php endif; ?>
+                                    <span class="url-title"><?= htmlspecialchars((string) $v['block_label']) ?></span>
+                                </td>
+                                <td class="num"><?= BeitragStats::nf((float) $v['views']) ?></td>
+                                <td class="num"><?= $v['v7_complete'] ? BeitragStats::nf((float) $v['v7']) : '–' ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php else: ?>
+        <div class="cms-hint">
+            <strong>Platzierung noch nicht erfasst.</strong> Sobald
+            <code>cron/check_placements.php</code> das erste Mal gelaufen ist, erscheint hier der
+            Vergleich nach Ort auf der Website.
+        </div>
+        <?php endif; ?>
+
         <!-- ================= Lebenszyklus ================= -->
         <?php if ($lifecycle['n_mature'] >= BeitragStats::MIN_GROUP): ?>
         <div class="card">
@@ -339,8 +497,13 @@ $sortHead = function (string $key, string $label, string $title) use ($sort, $di
                 <div class="card-header"><h2 class="card-title">Wochentag der Veröffentlichung</h2></div>
                 <p class="card-desc">
                     Median der Aufrufe in den ersten 7 Tagen, gruppiert nach dem Wochentag der
-                    Erstsichtung. Tage mit weniger als <?= BeitragStats::MIN_GROUP ?> Beiträgen
-                    haben keinen Balken – zu wenig Daten für eine Aussage.
+                    <strong>Veröffentlichung</strong>. Tage mit weniger als
+                    <?= BeitragStats::MIN_GROUP ?> Beiträgen haben keinen Balken – zu wenig Daten
+                    für eine Aussage.
+                    <?php if ($weekdayData['fallback'] > 0): ?>
+                        Bei <?= BeitragStats::nf((float) $weekdayData['fallback']) ?> Beiträgen ist
+                        kein Veröffentlichungsdatum erfasst; dort zählt ersatzweise die Erstsichtung.
+                    <?php endif; ?>
                 </p>
                 <div class="chart-wrap"><canvas id="weekdayChart"></canvas></div>
                 <table class="data-table">
@@ -516,10 +679,25 @@ $sortHead = function (string $key, string $label, string $title) use ($sort, $di
         <div class="card">
             <div class="card-header"><h2 class="card-title">Was diese Zahlen nicht sagen</h2></div>
             <p class="card-desc">
-                <strong>Kein Veröffentlichungsdatum.</strong> Clubdesk liefert keines, und im Tracker
-                kommt keines an. Alters-, Wochentags- und Lebenszyklus-Auswertung benutzen stattdessen
-                die Erstsichtung – den ersten gemessenen Aufruf. Bei einem Beitrag, den am
-                Publikationstag niemand öffnet, liegt sie zu spät.
+                <strong>Veröffentlichungsdatum nur teilweise.</strong> Der Tracker bekommt keines;
+                der Platzierungs-Monitor liest es von der Beitragskachel der Website ab. Für
+                Beiträge, die aus allen Listen gefallen sind, gibt es keines – dort steht ersatzweise
+                die Erstsichtung, der erste gemessene Aufruf. Die 7-Tage-Werte rechnen bewusst
+                weiterhin ab Erstsichtung, weil für Beiträge von vor dem 3. Juli 2026 gar keine
+                Messung existiert und ein Fenster ab echter Veröffentlichung dort null ergäbe.
+            </p>
+            <p class="card-desc">
+                <strong>Mehrfach platzierte Beiträge fehlen im Ortsvergleich.</strong> Steht eine
+                Meldung in zwei Blöcken, kennt die Statistik trotzdem nur einen Zähler für sie.
+                Sie einem Ort zuzuschlagen oder in beide zu zählen wäre gleichermassen falsch,
+                deshalb bleiben sie aussen vor und werden über der Tabelle beziffert.
+            </p>
+            <p class="card-desc">
+                <strong>Bruchstelle im September 2026.</strong> Bis dahin wurden Beiträge, die über
+                „Weitere Einträge" geöffnet wurden, als Startseiten-Aufruf gezählt – der
+                Clubdesk-Parameter kam dort in einer Form an, die der Tracker nicht als Beitrag
+                erkannte. Seit dem Fix zählen sie richtig. Ein Anstieg der Beitragszahlen zu diesem
+                Zeitpunkt ist daher ein Mess-, kein Reichweiteneffekt.
             </p>
             <p class="card-desc">
                 <strong>Kein Inventar aller Beiträge.</strong> Ein Beitrag ohne einen einzigen Aufruf

@@ -182,9 +182,20 @@ class Social
             // Beitrag/Detail-Objekt: c identifiziert den Beitrag eindeutig → eigene Seite.
             // b (Block) und s (Signatur) fliessen bewusst NICHT in den Schlüssel, damit derselbe
             // Beitrag über verschiedene Blöcke/Trägerseiten als eine Seite zählt.
+            //
+            // c kann eine KETTE sein: die Clubdesk-Vollisten ("Weitere Einträge") liefern
+            // c=NL,ND1000043 – erst der Listen-Kontext (NL/EL, ohne Ziffern), dann der Beitrag.
+            // Der Beitrag ist das letzte Glied mit Ziffern. Ohne diese Schleife fällt der Wert
+            // durch, c wird verworfen und der Aufruf landet auf der Trägerseite (meist /) –
+            // der Beitrag wäre dann als Startseiten-Aufruf gezählt.
             $c = $params['c'] ?? '';
-            if (is_string($c) && preg_match('/^[A-Za-z]{1,3}\d+$/', $c)) {
-                return ['/beitrag/' . $c, $host];
+            if (is_string($c) && $c !== '') {
+                foreach (array_reverse(explode(',', $c)) as $part) {
+                    $part = trim($part);
+                    if (preg_match('/^[A-Za-z]{1,3}\d+$/', $part)) {
+                        return ['/beitrag/' . $part, $host];
+                    }
+                }
             }
             unset($params['c'], $params['b'], $params['s'], $params['rfb']);
             foreach (array_keys($params) as $k) {

@@ -85,6 +85,20 @@ Zwei Fallen, die dort gelöst sind und bei jeder neuen Auswertung wieder auftret
 
 Kanonische Spec: `docs/beitrags-analyse.md`.
 
+## Platzierung: was Clubdesk hergibt
+
+`PlacementMonitor` liest die Beitragskacheln aus dem **rohen** HTML der Website
+(`cleanContent()` würde die `onclick`-Attribute per `strip_tags()` zerstören).
+Clubdesk rendert serverseitig, ein `curl` reicht – kein JavaScript nötig.
+
+| Falle | Lösung |
+|---|---|
+| Die Website hat keine Sitemap (404) | Navigation aus dem Roh-HTML der Startseite (`discoverPages()`) |
+| Vollisten antworten ohne `s=`-Signatur mit 404 | Signatur aus dem "Weitere Einträge"-Link der Trägerseite mitnehmen |
+| News-Listen haben keinen eigenen Titel | Nächste vorangehende Überschrift als Label (`labelForBlock()`) |
+| Ein Beitrag kann in mehreren Blöcken stehen | n:m-Tabelle; im Ortsvergleich ausgeschlossen, weil `pageviews` nur einen Zähler je Beitrag kennt |
+| Platzierung per JOIN in die Aggregat-Query | **Nie** – der Fan-out vervielfacht `COUNT(*)`. Eigene Query + Merge in PHP, wie bei den Likes |
+
 ## Muster: DB-Migration
 
 1. `setup/schema.sql` → kanonisches Voll-Schema (Quelle für neue Installationen via phpMyAdmin-Import) ergänzen
