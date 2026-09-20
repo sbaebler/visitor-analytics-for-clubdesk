@@ -19,9 +19,14 @@ declare(strict_types=1);
  *   Befehl: php -f /home/USER/public_html/stats/cron/check_placements.php
  *
  * Bei Erfolg gibt das Skript nichts aus – sonst würde cPanel jeden Lauf als
- * E-Mail verschicken. Für den Lauf von Hand `-v` anhängen, dann kommt eine
- * Zusammenfassung. Fehler und ein Lauf ganz ohne gefundene Kacheln gehen auf
- * STDERR und beenden mit Exitcode 1 – cPanel meldet das dann.
+ * E-Mail verschicken. Für den Lauf von Hand eine Zusammenfassung anfordern:
+ *
+ *   php -f .../check_placements.php -- -v
+ *
+ * Das `--` ist nötig, sonst verarbeitet PHP das `-v` selbst (Versionsausgabe).
+ *
+ * Fehler und ein Lauf ganz ohne gefundene Kacheln gehen auf STDERR und beenden
+ * mit Exitcode 1 – cPanel meldet das dann.
  */
 
 if (PHP_SAPI !== 'cli') {

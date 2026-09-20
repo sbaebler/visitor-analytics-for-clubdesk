@@ -331,6 +331,19 @@ final class BeitragStats
      */
     public static function withPlacements(array $rows, array $placements, array $blockConfig = []): array
     {
+        // Bezeichnung je Block über ALLE Beiträge sammeln. Aus Altdaten
+        // rekonstruierte Zeilen (source='referrer') haben kein eigenes Label –
+        // ohne diese Karte stünde dort "Block 1002986", obwohl der Name aus den
+        // gescrapten Zeilen desselben Blocks bekannt ist.
+        $labelByBlock = [];
+        foreach ($placements as $own) {
+            foreach ($own as $p) {
+                if ($p['block_label'] !== null && !isset($labelByBlock[$p['block_id']])) {
+                    $labelByBlock[$p['block_id']] = $p['block_label'];
+                }
+            }
+        }
+
         foreach ($rows as &$r) {
             $own = $placements[$r['c_key']] ?? [];
 
@@ -360,7 +373,10 @@ final class BeitragStats
                 $cfg   = $blockConfig[$bid] ?? [];
 
                 $r['block_id']    = $bid;
-                $r['block_label'] = $cfg['name'] ?? ($first['block_label'] ?? ('Block ' . $bid));
+                $r['block_label'] = $cfg['name']
+                    ?? $first['block_label']
+                    ?? $labelByBlock[$bid]
+                    ?? ('Block ' . $bid);
                 $r['gruppe']      = $cfg['gruppe'] ?? self::groupForPage($first['page_url']);
             }
 
