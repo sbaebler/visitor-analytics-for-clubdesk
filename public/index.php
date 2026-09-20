@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/Auth.php';
 require_once __DIR__ . '/../src/Database.php';
+require_once __DIR__ . '/../src/BeitragStats.php';
 
 // CSP erlaubt Chart.js von jsdelivr
 header("Content-Security-Policy: default-src 'none'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'none'; frame-src 'none'");
@@ -87,7 +88,7 @@ if ($hasCmsCol) $p[':cms'] = $isCmsFilter;
 // Generische Titel, die eine Seite/einen Beitrag nicht eindeutig benennen (Overlay noch
 // nicht geladen, Fehler-/Login-Seiten). Werden bei der Titel-Auswahl übersprungen, damit
 // z. B. Beiträge unter /beitrag/… ihren echten Artikel-Titel statt "Willkommen" zeigen.
-$genericTitles    = ['Willkommen - Zurich Sailing', 'Seite nicht gefunden.', 'Bitte anmelden'];
+$genericTitles    = BeitragStats::GENERIC_TITLES;
 $genericTitlesSql = implode(',', array_map(fn($t) => $pdo->quote($t), $genericTitles));
 
 // Seitenfilter: $urlFilter ist ein Pfad (z. B. /segelsport/breitensport/zlc).
@@ -144,7 +145,13 @@ $pageTree = buildPageTree($allPages);
 
 // Beiträge: Clubdesk-Detail-Objekte (Pfad /beitrag/<c>) separat ausgewertet.
 // Entstehen aus $allPages (query-lose synthetische Pfade), daher keine eigene DB-Query nötig.
-$topBeitraege = array_values(array_filter($allPages, fn($r) => str_starts_with($r['url'], '/beitrag/')));
+// Der Grossbuchstaben-Test schliesst – identisch zu BeitragStats – die Altzeilen aus
+// setup/migrate_beitrag.sql aus ('/beitrag/b<block>'): zusammengefallene News-Blöcke,
+// keine echten Beiträge. Sonst zeigt diese Karte etwas anderes als /beitraege.php.
+$topBeitraege = array_values(array_filter(
+    $allPages,
+    fn($r) => preg_match('#^/beitrag/[A-Z]#', $r['url']) === 1
+));
 usort($topBeitraege, fn($a, $b) => (int)$b['views'] <=> (int)$a['views']);
 $topBeitraege = array_slice($topBeitraege, 0, 15);
 
@@ -328,10 +335,7 @@ if ($hasPageChangesTable) {
 // --- Hilfsfunktionen ---
 function formatDuration(float $secs): string
 {
-    if ($secs <= 0) return '–';
-    $m = floor($secs / 60);
-    $s = round($secs % 60);
-    return $m > 0 ? "{$m}m {$s}s" : "{$s}s";
+    return BeitragStats::formatDuration($secs);
 }
 
 function shortUrl(string $url): string
@@ -441,10 +445,10 @@ function renderPageTree(array $node, int $depth, string $range, string $view): s
 }
 
 // Seitentitel bereinigen: "Titel – Zurich Sailing" → "Titel"
+// Implementierung in BeitragStats, damit beide Seiten identisch bereinigen.
 function cleanTitle(?string $title): string
 {
-    $title = preg_replace('/\s*[-–|]\s*Zurich Sailing.*$/i', '', $title ?? '');
-    return trim((string) $title);
+    return BeitragStats::cleanTitle($title);
 }
 
 function countryFlag(string $code): string
@@ -506,6 +510,9 @@ $deviceData   = array_column($devices, 'cnt');
         <nav class="view-nav">
             <a href="/?range=<?= $range ?>&view=real&url=<?= urlencode($urlFilter) ?>&scope=<?= $urlScope ?>" class="range-btn <?= $view === 'real' ? 'active' : '' ?>" title="Echte Website-Besucher – Zugriffe durch Redakteure sind ausgeblendet">Besucher</a>
             <a href="/?range=<?= $range ?>&view=cms&url=<?= urlencode($urlFilter) ?>&scope=<?= $urlScope ?>"  class="range-btn <?= $view === 'cms'  ? 'active' : '' ?>" title="Zugriffe durch Redakteure im Clubdesk-Editor (Content-Management-System)">CMS</a>
+        </nav>
+        <nav class="view-nav">
+            <a href="/beitraege.php" class="range-btn" title="Beiträge im Detail auswerten: Muster, Lebenszyklus, Themen">Beiträge</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>
@@ -572,8 +579,8 @@ $deviceData   = array_column($devices, 'cnt');
                 <div class="card-header card-header-tabs">
                     <h2 class="card-title">Seiten</h2>
                     <div class="card-tabs" role="tablist">
-                        <button type="button" class="tab-btn active" data-pages-tab="top">Häufigste</button>
-                        <button type="button" class="tab-btn" data-pages-tab="tree">Sitemap</button>
+                        <button type="button" class="tab-btn active" data-tab-group="pages" data-tab-target="top">Häufigste</button>
+                        <button type="button" class="tab-btn" data-tab-group="pages" data-tab-target="tree">Sitemap</button>
                     </div>
                 </div>
 
@@ -657,9 +664,15 @@ $deviceData   = array_column($devices, 'cnt');
         <?php if (!empty($topBeitraege)): ?>
         <!-- Beiträge (Clubdesk-Detail-Objekte, separat ausgewertet) -->
         <div class="card">
-            <div class="card-header">
+            <div class="card-header card-header-tabs">
                 <h2 class="card-title">Beiträge</h2>
+                <a class="tab-btn" href="/beitraege.php">Alle analysieren →</a>
             </div>
+            <p class="card-desc">
+                Meistgelesene Beiträge im gewählten Zeitraum. Für den fairen Vergleich über
+                unterschiedlich alte Beiträge hinweg und für Muster nach Wochentag, Thema und
+                Herkunft: <a href="/beitraege.php">Beitrags-Auswertung</a>.
+            </p>
             <table class="data-table">
                 <thead>
                     <tr><th>Beitrag</th><th>Aufrufe</th><th>Besucher</th></tr>

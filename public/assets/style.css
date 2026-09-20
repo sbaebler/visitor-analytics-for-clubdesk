@@ -527,3 +527,73 @@ a.url-path:hover { text-decoration: underline; color: var(--blue); }
 @media (max-width: 600px) {
     .uptime-status-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== Beitrags-Auswertung (beitraege.php) ===== */
+
+/* 7 Spalten auf voller Kartenbreite: erste Spalte flexibel mit Ellipsis,
+   Zahlenspalten schmal und fix – sonst schiebt ein langer Beitragstitel die
+   rechten Spalten aus der Karte. Gleiches Muster wie #pages-card. */
+#beitrag-card .data-table { table-layout: fixed; }
+#beitrag-card .data-table th:first-child,
+#beitrag-card .data-table td:first-child { overflow: hidden; }
+#beitrag-card .data-table th:nth-child(n+2),
+#beitrag-card .data-table td:nth-child(n+2) {
+    width: 5.6rem;
+    padding-left: .3rem;
+    padding-right: .8rem;
+}
+#beitrag-card .data-table th:nth-child(2),
+#beitrag-card .data-table td:nth-child(2) { width: 8rem; }
+/* Lange Spaltentitel ("Besuchertage") sollen zweizeilig umbrechen statt in die
+   Nachbarspalte zu laufen – bei table-layout:fixed bricht ein Einzelwort sonst nicht. */
+#beitrag-card .data-table th {
+    overflow-wrap: anywhere;
+    vertical-align: bottom;
+    line-height: 1.25;
+}
+#beitrag-card .url-path,
+#beitrag-card .url-title { max-width: 100%; }
+
+/* Sortierbare Spaltenköpfe */
+.data-table th a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--border);
+}
+.data-table th a:hover { color: var(--blue); border-bottom-color: var(--blue); }
+
+/* Gruppe unter der Mustergrenze: sichtbar, aber erkennbar nicht belastbar */
+.row-thin td { color: var(--muted); }
+.row-thin .url-path { color: var(--muted); font-weight: 600; }
+
+/* Heatmap Wochentag x Stunde. Reines CSS-Grid – Chart.js kann das nur mit
+   Zusatz-Plugin, und die CSP erlaubt genau eine jsdelivr-Datei. */
+.heatmap-wrap { overflow-x: auto; }
+.heatmap {
+    display: grid;
+    grid-template-columns: 2rem repeat(24, minmax(14px, 1fr));
+    gap: 2px;
+    min-width: 520px;
+    align-items: center;
+}
+.heat-corner { height: 1rem; }
+.heat-hour {
+    font-size: .62rem;
+    color: var(--muted);
+    text-align: center;
+    height: 1rem;
+    line-height: 1rem;
+}
+.heat-day {
+    font-size: .7rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: right;
+    padding-right: .35rem;
+}
+/* --i ist der Anteil am Spitzenwert (0..1); 0 bleibt als leeres Feld sichtbar. */
+.heat-cell {
+    height: 16px;
+    border-radius: 3px;
+    background: rgba(33, 150, 243, calc(.06 + var(--i, 0) * .94));
+}

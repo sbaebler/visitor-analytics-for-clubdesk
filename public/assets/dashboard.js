@@ -61,8 +61,8 @@ var ZSDash = (function () {
     });
   }
 
-  function initDeviceChart(labels, data) {
-    var ctx = document.getElementById('deviceChart');
+  function initDoughnutChart(id, labels, data, colors) {
+    var ctx = document.getElementById(id);
     if (!ctx || !labels.length) return;
     new Chart(ctx, {
       type: 'doughnut',
@@ -70,7 +70,7 @@ var ZSDash = (function () {
         labels: labels,
         datasets: [{
           data: data,
-          backgroundColor: [NAVY, BLUE, BLUE_L],
+          backgroundColor: colors || [NAVY, BLUE, BLUE_L],
           borderWidth: 2,
           borderColor: '#fff',
         }],
@@ -149,35 +149,120 @@ var ZSDash = (function () {
     });
   }
 
-  // Umschalter "Häufigste" <-> "Sitemap" in der Seiten-Karte (ohne Neuladen)
-  function initPageTabs() {
-    var tabs = document.querySelectorAll('[data-pages-tab]');
-    if (!tabs.length) return;
-    var views = {
-      top: document.getElementById('pages-top'),
-      tree: document.getElementById('pages-tree'),
-    };
-    tabs.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var target = btn.getAttribute('data-pages-tab');
-        tabs.forEach(function (b) {
-          b.classList.toggle('active', b === btn);
-        });
-        Object.keys(views).forEach(function (key) {
-          if (views[key]) views[key].hidden = key !== target;
+  // Tab-Umschalter fuer beliebig viele Karten (ohne Neuladen).
+  // Buttons: data-tab-group="pages" data-tab-target="top"
+  // Panels:  id="pages-top"  (= Gruppe + '-' + Ziel)
+  function initTabs() {
+    var btns = document.querySelectorAll('[data-tab-group]');
+    if (!btns.length) return;
+    var groups = {};
+    btns.forEach(function (b) {
+      var g = b.getAttribute('data-tab-group');
+      (groups[g] = groups[g] || []).push(b);
+    });
+    Object.keys(groups).forEach(function (g) {
+      groups[g].forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          groups[g].forEach(function (b) {
+            var on = b === btn;
+            b.classList.toggle('active', on);
+            var panel = document.getElementById(g + '-' + b.getAttribute('data-tab-target'));
+            if (panel) panel.hidden = !on;
+          });
         });
       });
+    });
+  }
+
+  // --- Beitrags-Auswertung (beitraege.php) ---
+
+  // Median-Aufrufe je Wochentag. Werte unter der Mustergrenze kommen als null
+  // an und erzeugen bewusst keinen Balken (siehe beitraege.php).
+  function initWeekdayChart(cfg) {
+    var ctx = document.getElementById('weekdayChart');
+    if (!ctx || !cfg || !cfg.labels.length) return;
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: cfg.labels,
+        datasets: [{
+          label: 'Median Aufrufe in 7 Tagen',
+          data: cfg.data,
+          backgroundColor: BLUE,
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: '#EDF2F7' } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // Lebenszyklus: Anteil je Tag als Balken, kumulierte Kurve auf zweiter Achse.
+  function initLifecycleChart(cfg) {
+    var ctx = document.getElementById('lifecycleChart');
+    if (!ctx || !cfg || !cfg.labels.length) return;
+    new Chart(ctx, {
+      data: {
+        labels: cfg.labels,
+        datasets: [
+          {
+            type: 'bar', label: 'Anteil der Aufrufe', data: cfg.share,
+            backgroundColor: BLUE_L, borderRadius: 4, yAxisID: 'y',
+          },
+          {
+            type: 'line', label: 'kumuliert', data: cfg.cum,
+            borderColor: NAVY, backgroundColor: 'transparent',
+            tension: 0.3, pointRadius: 2, yAxisID: 'y1',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } },
+          tooltip: {
+            callbacks: {
+              label: function (c) { return c.dataset.label + ': ' + c.parsed.y + ' %'; },
+            },
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true, grid: { color: '#EDF2F7' },
+            ticks: { callback: function (v) { return v + ' %'; } },
+          },
+          y1: {
+            beginAtZero: true, max: 100, position: 'right', grid: { display: false },
+            ticks: { callback: function (v) { return v + ' %'; } },
+          },
+          x: { grid: { display: false } },
+        },
+      },
     });
   }
 
   return {
     init: function (labels, pvData, uvData, deviceLabels, deviceData) {
       initLineChart(labels, pvData, uvData);
-      initDeviceChart(deviceLabels, deviceData);
-      initPageTabs();
+      initDoughnutChart('deviceChart', deviceLabels, deviceData);
+      initTabs();
     },
     initUptime: function (labels, datasets, datasetLabels) {
       initUptimeChart(labels, datasets, datasetLabels);
+    },
+    initBeitraege: function (cfg) {
+      initWeekdayChart(cfg.weekday);
+      initLifecycleChart(cfg.lifecycle);
+      initDoughnutChart('refChart', cfg.referrer.labels, cfg.referrer.data, cfg.referrer.colors);
+      initTabs();
     },
   };
 })();

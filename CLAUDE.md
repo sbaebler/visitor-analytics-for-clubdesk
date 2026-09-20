@@ -24,6 +24,7 @@ public/                 Document Root der Subdomain
   collect.php           Tracking-Endpunkt (POST von tracker.js)
   index.php             Admin-Dashboard (Auth-geschützt)
   login.php / logout.php
+  beitraege.php         ← NEU: Beitrags-Auswertung (Muster, Lebenszyklus, Themen)
   social.php            ← NEU: Social API (GET stats / POST like)
   tracker.js            Client-seitiges Tracking-Snippet
   widget.php            ← NEU: iframe-Widget für Clubdesk
@@ -37,6 +38,7 @@ setup/
   migrate_page_changes.sql ← NEU: Content-Change-Detection-Tabellen für bestehende Installationen
 src/
   Auth.php              Session-Auth für Admin-Dashboard
+  BeitragStats.php      ← NEU: Beitrags-Auswertung (rein lesend, keine Migration)
   Database.php          PDO-Singleton
   Social.php            ← NEU: Like-Logik, URL-Hashing, Stats
   SitemapMonitor.php    ← NEU: Sitemap-Parsing, Content-Diff, Change-Detection
@@ -49,6 +51,12 @@ src/
 - Keine globalen Funktionen in neuen Dateien – Klassen verwenden (wie `Auth`, `Database`, `Social`)
 - URL-Normalisierung: `Social::normalizePageUrl()` und `normalizePageUrl()` in `collect.php` müssen **identisch** bleiben – sonst stimmen Widget-View-Counts nicht mit Dashboard überein. Kanonische Spec: `docs/url-normalization.md`
 - Schweizer Zahlenformat: `number_format($n, 0, '.', "'")` überall wo Zahlen angezeigt werden
+  (als `BeitragStats::nf()` verfügbar)
+- Legacy-Beiträge: `setup/migrate_beitrag.sql` hat Altzeilen zu `/beitrag/b<block>` umgeschrieben –
+  das sind **keine** echten Beiträge. Jede Beitrags-Auswertung filtert sie über den
+  Grossbuchstaben-Test aus (`^/beitrag/[A-Z]`). Spec: `docs/beitrags-analyse.md`
+- `cleanTitle()` und `formatDuration()` leben in `BeitragStats`; `index.php` delegiert dorthin –
+  nicht duplizieren
 - `social.php` und `widget.php` überschreiben `X-Frame-Options: DENY` via `header()` (erlauben iframe-Einbettung)
 
 ## DB-Schema (Überblick)
@@ -118,6 +126,11 @@ nicht statisch im Template gesetzt.
 **Neue DB-Spalte in pageviews:** `setup/schema.sql` (kanonisches Voll-Schema, für neue Installationen) **und** `setup/install.php` (CREATE TABLE, CLI-Helfer) synchron halten + neue `setup/migrate_*.sql` Datei für bestehende Installationen + `collect.php` anpassen.
 
 **Admin-Dashboard erweitern:** Queries in `public/index.php`, HTML darunter. CSS-Klassen aus `assets/style.css` verwenden.
+
+**Beitrags-Auswertung erweitern:** `src/BeitragStats.php` (alle Queries + Klassifikation),
+`public/beitraege.php` (nur Darstellung), Charts in `assets/dashboard.js` unter
+`ZSDash.initBeitraege`. Kanonische Spec inkl. Schwellwerten und Grenzen:
+`docs/beitrags-analyse.md`. Rein lesend – keine DB-Migration.
 
 **Content-Change-Detection anpassen:** `src/SitemapMonitor.php` (Sitemap-Parsing, Content-Cleaning, Diff-Logik), `cron/check_changes.php` (Cron-Einstiegspunkt), Config unter `config['sitemap_monitor']`. Kanonische Spec: `docs/content-change-detection.md`. Normalisierung ausschliesslich via `Social::normalizePageUrl()` (keine dritte Implementierung).
 

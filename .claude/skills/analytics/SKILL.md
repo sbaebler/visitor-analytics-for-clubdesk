@@ -66,6 +66,25 @@ Wichtig: `SitemapMonitor` normalisiert Sitemap-URLs **ausschliesslich** über
 Normalisierungs-Implementierung. Gespeichert wird der normalisierte Pfad
 (gleiche Form wie `pageviews.url`), nicht die rohe absolute URL.
 
+## Auswertungsklassen (rein lesend)
+
+`BeitragStats` (Beitrags-Auswertung) ist das Muster für Auswertungen:
+- **Rein lesend** – keine Tabelle, keine Spalte, keine Migration
+- Normalisiert **nicht** neu, sondern zerlegt nur den gespeicherten Pfad
+  (siehe `docs/url-normalization.md`: Konsumenten normalisieren nicht erneut)
+- Alle SQL und alle Klassifikation in der Klasse; die Seite stellt nur dar
+- Schwellwerte als Klassenkonstanten, die die UI-Texte interpolieren – sonst
+  laufen angezeigte Regel und tatsächliches Verhalten auseinander
+
+Zwei Fallen, die dort gelöst sind und bei jeder neuen Auswertung wieder auftreten:
+
+| Falle | Lösung |
+|---|---|
+| Altzeilen `/beitrag/b<block>` aus `migrate_beitrag.sql` sind keine echten Beiträge | `SUBSTRING(url,10,1) COLLATE utf8mb4_bin BETWEEN 'A' AND 'Z'` – das COLLATE ist Pflicht, sonst ist der Vergleich case-insensitiv |
+| `social_stats` über `url_hash` joinen schlägt fehl | Über `url` joinen: `Social::hashUrl()` hasht ohne `strtolower`, `SitemapMonitor` mit |
+
+Kanonische Spec: `docs/beitrags-analyse.md`.
+
 ## Muster: DB-Migration
 
 1. `setup/schema.sql` → kanonisches Voll-Schema (Quelle für neue Installationen via phpMyAdmin-Import) ergänzen
