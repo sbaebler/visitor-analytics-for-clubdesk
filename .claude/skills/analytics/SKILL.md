@@ -23,6 +23,7 @@ reine Pfad-Extraktion zur Anzeige/Gruppierung.
 |---|---|---|
 | Tracker (collect.php) | salt + IP + UA + Lang + Datum | Täglicher Wechsel → Datenschutz |
 | Social Widget (Social.php) | salt + IP | Dauerhaft → Like bleibt erhalten |
+| Weiterleitungs-Links (ShortLinks.php) | salt + IP | Gleich wie Social → „Personen“ pro Link |
 
 Beide nutzen denselben `salt` aus `config.php`.
 

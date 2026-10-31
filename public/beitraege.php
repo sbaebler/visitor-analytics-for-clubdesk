@@ -197,6 +197,7 @@ $sortHead = function (string $key, string $label, string $title) use ($sort, $di
         <nav class="view-nav">
             <a href="/" class="range-btn">Übersicht</a>
             <a href="/beitraege.php" class="range-btn active">Beiträge</a>
+            <a href="/links.php" class="range-btn">Links</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>

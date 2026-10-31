@@ -38,5 +38,11 @@
     ExpiresByType text/css              "access plus 1 hour"
 </IfModule>
 
+# Zählende Weiterleitungs-Links: /go/<slug> → go.php?s=<slug> (siehe docs/links.md)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^go/([A-Za-z0-9-]+)/?$ go.php?s=$1 [L,QSA]
+</IfModule>
+
 # Verzeichnislisting deaktivieren
 Options -Indexes

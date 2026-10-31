@@ -513,6 +513,7 @@ $deviceData   = array_column($devices, 'cnt');
         </nav>
         <nav class="view-nav">
             <a href="/beitraege.php" class="range-btn" title="Beiträge im Detail auswerten: Muster, Lebenszyklus, Themen">Beiträge</a>
+            <a href="/links.php" class="range-btn" title="Zählende Weiterleitungs-Links, z.B. für Clubdesk-Dateien">Links</a>
         </nav>
         <a href="/logout.php" class="logout-btn">Abmelden</a>
     </header>

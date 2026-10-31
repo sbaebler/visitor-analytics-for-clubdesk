@@ -180,7 +180,35 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
-    echo '<p style="color:green;font-family:monospace">✅ Tabellen erfolgreich erstellt (inkl. Social Widget, Uptime-Monitor, Content-Change-Detection, Beitrags-Platzierung).</p>';
+    // Zählende Weiterleitungs-Links (/go/<slug>). Spec: docs/links.md
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS short_links (
+            id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+            slug        VARCHAR(64)   NOT NULL,
+            target_url  VARCHAR(2048) NOT NULL,
+            label       VARCHAR(255)  NOT NULL DEFAULT '',
+            is_active   TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+            created_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_slug (slug)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS short_link_clicks (
+            id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            link_id       INT UNSIGNED  NOT NULL,
+            ip_hash       CHAR(64)      NOT NULL COMMENT 'SHA256(salt|IP)',
+            referrer_host VARCHAR(253)  NULL,
+            device_type   ENUM('desktop','mobile','tablet') NOT NULL DEFAULT 'desktop',
+            is_bot        TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
+            clicked_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_link_time (link_id, clicked_at),
+            INDEX idx_clicked_at (clicked_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    echo '<p style="color:green;font-family:monospace">✅ Tabellen erfolgreich erstellt (inkl. Social Widget, Uptime-Monitor, Content-Change-Detection, Beitrags-Platzierung, Weiterleitungs-Links).</p>';
     echo '<p style="font-family:monospace">⚠️ Lösche oder schütze jetzt diese Datei: <code>setup/install.php</code></p>';
 } catch (PDOException $e) {
     echo '<p style="color:red;font-family:monospace">Fehler: ' . htmlspecialchars($e->getMessage()) . '</p>';

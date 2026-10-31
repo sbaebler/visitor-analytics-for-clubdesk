@@ -26,6 +26,8 @@ public/                 Document Root der Subdomain
   index.php             Admin-Dashboard (Auth-geschützt)
   login.php / logout.php
   beitraege.php         ← NEU: Beitrags-Auswertung (Muster, Lebenszyklus, Themen)
+  go.php                ← NEU: Zählende Weiterleitung /go/<slug> (Rewrite in .htaccess)
+  links.php             ← NEU: Admin für Weiterleitungs-Links (anlegen, Klicks ansehen)
   social.php            ← NEU: Social API (GET stats / POST like)
   tracker.js            Client-seitiges Tracking-Snippet
   widget.php            ← NEU: iframe-Widget für Clubdesk
@@ -37,11 +39,13 @@ setup/
   install.php           Optionaler CLI-Helfer (php setup/install.php) – legt DB an + Tabellen
   migrate_social.sql    ← NEU: Social-Tabellen für bestehende Installationen
   migrate_page_changes.sql ← NEU: Content-Change-Detection-Tabellen für bestehende Installationen
+  migrate_links.sql     ← NEU: Weiterleitungs-Link-Tabellen für bestehende Installationen
 src/
   Auth.php              Session-Auth für Admin-Dashboard
   BeitragStats.php      ← NEU: Beitrags-Auswertung (rein lesend, keine Migration)
   Database.php          PDO-Singleton
   PlacementMonitor.php  ← NEU: liest von der Website, wo ein Beitrag eingebettet ist
+  ShortLinks.php        ← NEU: Weiterleitungs-Links, Klickzählung, Bot-Erkennung
   Social.php            ← NEU: Like-Logik, URL-Hashing, Stats
   SitemapMonitor.php    ← NEU: Sitemap-Parsing, Content-Diff, Change-Detection
 ```
@@ -72,6 +76,8 @@ social_stats   – Aggregat-Cache: like_count pro url_hash
 tracked_pages  – Content-Change-Detection: aktueller Content-Hash pro überwachter Seite (Vergleichs-Baseline)
 page_changes   – Content-Change-Detection: Log jeder erkannten Content-Änderung (inkl. Diff-Excerpt)
 beitrag_placements – Wo ein Beitrag auf der Website steht (Block + Trägerseite), inkl. Publikationsdatum
+short_links    – Weiterleitungs-Links: slug → target_url
+short_link_clicks – Ein Eintrag pro Aufruf eines /go/-Links (ip_hash, referrer_host, device_type, is_bot)
 ```
 
 View-Counts im Widget kommen aus `pageviews` (kein Duplikat).
@@ -140,6 +146,10 @@ Ortsvergleich, weil `pageviews` pro Beitrag nur einen Zähler kennt. Spec: `docs
 `public/beitraege.php` (nur Darstellung), Charts in `assets/dashboard.js` unter
 `ZSDash.initBeitraege`. Kanonische Spec inkl. Schwellwerten und Grenzen:
 `docs/beitrags-analyse.md`. Rein lesend – keine DB-Migration.
+
+**Weiterleitungs-Links anpassen:** `src/ShortLinks.php` (Logik, Queries, Bot-Muster), `public/go.php`
+(Redirect, muss `no-store` bleiben), `public/links.php` (Admin). Bots/Link-Vorschauen werden mit
+`is_bot = 1` gespeichert und in allen Zählern ausgeblendet. Slug ist nach dem Anlegen fix. Spec: `docs/links.md`
 
 **Content-Change-Detection anpassen:** `src/SitemapMonitor.php` (Sitemap-Parsing, Content-Cleaning, Diff-Logik), `cron/check_changes.php` (Cron-Einstiegspunkt), Config unter `config['sitemap_monitor']`. Kanonische Spec: `docs/content-change-detection.md`. Normalisierung ausschliesslich via `Social::normalizePageUrl()` (keine dritte Implementierung).
 
